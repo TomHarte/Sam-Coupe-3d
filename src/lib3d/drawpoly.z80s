@@ -1,0 +1,882 @@
+;
+;	DrawPoly - draws a polygon using A vertices, in two arrays
+;	with x positions starting at (H:0) and y positions at (H+1:0),
+;	filled with colour b (high and low nibbles will be plotted;
+;	stippling is an option)
+;
+;	clobbers: af, bc, de, hl, af', bc', de', hl'
+;
+
+DS ALIGN 256
+
+LEFTTAB:
+	ds 256
+RIGHTTTAB:
+	ds 256
+
+@DrawScanline:
+
+	push af
+	push hl
+	push bc
+	ld (@+SPBackup), sp
+
+	; draw from c to a (a is on the right) on line l
+	
+		; get the address of the first pixel into hl
+			ld h, l
+			ld l, a
+
+		; get the length of the line into b
+			sub c
+			ld b, a
+
+		; check if we're starting on an odd pixel
+			scf
+			rr h
+			rr l
+
+			jr c, @+nohangingpixel		; a is one after the last pixel; draw only up to a, not up to and including
+
+			dec b
+
+			ld a, (hl)
+			and 0xf
+			
+			@HighColour1: equ $+1
+			or 0xf0
+			
+			ld (hl), a
+			dec l
+
+		@nohangingpixel:
+			inc l
+		
+		; draw main body of pixels here - divide width by 4 and loop
+		
+			ld a, b
+			srl a
+			srl a
+
+			ld sp, hl
+			@FullColour1: equ $+1
+			ld d, 0xff
+			@FullColour2: equ $+1
+			ld e, 0xff
+
+			neg
+			add 64
+
+			ld h, @+pushrun >> 8
+			add @+pushrun \ 256
+			ld l, a
+			jp (hl)
+
+		@pushrun:
+		
+			@CLLoop: EQU FOR 64
+				push de
+			NEXT @CLLoop
+;			INCLUDE "pushde64.z80s"		; push de, 64 times over - kept elsewhere for tidyness
+
+			; check if there's an extra 2 pixels to draw
+			rr b
+			rl c
+			rr b
+			jr nc, @+noextradouble
+
+				dec sp
+				pop de
+
+				@FullColour3: equ $+1
+				ld e, 0xff
+				push de
+
+			; check if there's an extra 1 pixel to draw
+
+			@noextradouble:
+			rr c
+			jr nc, @+noextrasingle
+
+			dec sp
+			pop de
+			ld a, e
+			and 0xf0
+			@LowColour1: equ $+1
+			or 0xf
+			ld e, a
+			push de
+
+	@noextrasingle:
+
+	ld sp, (@+SPBackup)
+	pop bc
+	pop hl
+	pop af
+
+ret
+
+
+
+NUMVERTS:
+	db 0
+VERTEXPOINTER:
+	dw 0
+	
+STARTY:
+	db 0
+ENDY: 
+	db 0
+
+DrawPoly:
+
+	; dynamically reprogram scanline filler now, so b can be forgotten after this
+	ld (NUMVERTS), a
+	ld a, b
+
+	ld (@-FullColour1), a
+	ld (@-FullColour2), a
+	ld (@-FullColour3), a
+	and 0x0f
+	ld (@-LowColour1), a
+	ld a, b
+	and 0xf0
+	ld (@-HighColour1), a
+
+	; store stuff
+	ld a, (NUMVERTS)
+	ld (VERTEXPOINTER), hl
+	inc h
+	ld e, a
+	ld d, a
+
+	; use b to store current highest vertex pointer, c to store value
+	ld l, 0
+	ld b, 0
+	ld c, (hl)
+
+	; get highest vertex pointer to b
+
+@highloop:
+	inc l		; look at next y value
+	
+	; check if look is over yet, exit if so
+	dec d
+	jr z, @+highloopdone
+
+	ld a, (hl)			; load new y value
+	cp c				; compare to current highest
+	jr nc, @-highloop	; don't do anything if it is lower
+	
+	ld b, l
+	ld c, a
+	jr @-highloop
+	
+@highloopdone:
+
+	; highest value is now in c
+	ld a, c
+	ld (ENDY), a
+
+	; use c to store current lowest vertex pointer, d to store value
+	ld l, 0
+	ld c, 0
+	ld d, (hl)
+	
+	; get highest vertex pointer to c
+@lowloop:
+	inc l		; look at next y value
+
+	; check if loop is over yet, exit if so
+	dec e
+	jr z, @+lowloopdone
+	
+	ld a, (hl)
+	cp d
+	jr c, @-lowloop
+
+	ld c, l
+	ld d, a
+	jr @-lowloop
+
+@lowloopdone:
+
+	; highest value is now in d
+	ld a, d
+	ld (STARTY), a
+
+	push bc		; b = current vertex, c = target
+
+	ld hl, RIGHTTTAB
+
+@leftloop:
+	ld a, b
+	cp c
+	jr z, @+leftloopdone
+
+	dec a
+	jp p, @+noreload
+
+	ld a, (NUMVERTS)
+	dec a
+
+	@noreload:
+
+	call @+PushToArray
+	ld b, a
+	jr @-leftloop
+
+@leftloopdone:
+
+	pop bc
+	ld hl, LEFTTAB
+	ld a, (NUMVERTS)
+	ld d, a
+
+@rightloop:
+	ld a, b
+	cp c
+	jr z, @+rightloopdone
+
+	inc a
+	cp d
+	jr nz, @+noreload
+
+	xor a
+
+	@noreload:
+
+	call @+PushToArray
+	ld b, a
+	jr @-rightloop
+
+@rightloopdone:
+
+	;
+	; page in the screen, for drawing
+	;
+
+		LD C, HMPR
+		IN a, (C)
+		push af
+		ld a, (rampage)
+		OUT (C), a
+
+		ld h, LEFTTAB >> 8
+		ld a, (ENDY)
+		ld l, a
+
+		ld a, (STARTY)
+		sub l
+		ld b, a
+
+		@plotloop:
+
+			; left pixel
+			ld a, (hl)
+			inc h
+
+			; right pixel
+			ld c, (hl)
+
+			call @-DrawScanline
+
+			inc l
+			dec h
+
+		djnz @-plotloop
+
+	;
+	; page the program RAM back in
+	;
+
+		pop af
+		ld c, HMPR
+		out (c), a
+
+	ret
+
+
+;
+;	PushToArray will add the vertical intersections for the line from b to a
+;	to the table pointed to by hl
+;
+@PushToArray:
+
+	push de
+	push af
+	push bc
+	push hl
+
+		; get x1, y1 (the higher one, if either is higher) into bc
+		ld hl, (VERTEXPOINTER)
+		ld l, b
+
+		ld b, (hl)
+		inc h
+		ld c, (hl)
+
+		; get x2, y2 (the lower one, if either is lower) into de
+		ld l, a
+		ld a, (hl)
+
+		dec h
+		ld d, (hl)
+		ld e, a
+
+		; turn e into yDelta - this will always be positive because points were
+		; initially clockwise and are passed to this function from highest to
+		; lowest
+
+		ld a, e
+		sub c
+		jp z, @+endOfPushToArray	; zero height lines contribute nothing
+		ld e, a
+
+		; get table write address into hl
+		pop hl
+		push hl
+
+		ld l, c
+
+		; calculate x positive or x negative, branch appropriately
+
+		ld a, d
+		sub b
+		jr c, @+xnegative
+		jp z, @+vertical
+
+	@xpositive:		; unused label, just for reading
+
+		ld d, a
+		; positive xdelta is in a, compare to positive ydelta from e
+		cp e
+
+		jr z, @+diagonalxpos
+		jr nc, @+xdeltagreaterxpos
+
+		; y delta is greater, x delta is positive - traditional Bresenham
+
+		; use a for delta
+		ld a, e
+		srl a
+
+		ld c, e
+
+	@xdgxploop:
+		ld (hl), b
+
+		sub d
+		jr nc, @+noxinc
+
+		inc b
+		add e
+
+		@noxinc:
+		inc l
+		dec c
+		jr nz, @-xdgxploop
+
+		jp @+endOfPushToArray
+
+	@diagonalxpos:
+		ld c, b
+		ld b, d
+
+	@diagonalloop:
+		ld (hl), c
+		inc c
+		djnz @-diagonalloop
+		
+		jp @+endOfPushToArray
+
+@xdeltagreaterxpos:
+
+		; x delta is greater, is positive
+		xor a
+		push de
+
+		call DIV88		; now d = xDelta / yDelta, a = xDelta % yDelta
+
+		; aiming for:
+		; errorTerm = HL', adjustUp = BC', adjustDown = DE'
+		; 
+
+		exx
+		pop de
+		ld d, 0
+		sla e
+		rl d			; de = adjustDown
+
+		ld b, 0
+		ld c, a			; bc = adjustUp >> 1
+
+		ld h, b
+		ld l, c
+		and a
+		sbc hl, de		; hl = errorTerm
+
+		sla c
+		rl b			; bc = adjustUp
+
+		exx
+
+		ld a, d
+		srl a
+		inc a			; a = initialPixelCount = finalPixelCount, d = wholeStep
+
+		push af			; store for finalPixelCount
+
+		ld a, d
+		sra a			; test for wholeStep&1
+		exx
+		jr nc, @+nolowbit
+
+			; errorTerm += yDelta (double errorTerm, add adjustDown, halve it)
+			add hl, hl
+			add hl, de
+			sra h
+			rr l
+
+		jr @+lowbitdone
+
+		@nolowbit:
+			; if !adjustUp then initialPixelCount--
+			ld (@+astorepos+1), a
+
+			ld a, b
+			or c
+
+			@astorepos:
+			ld a, 23
+
+			jr nz, @+noadjust
+
+			exx
+
+			dec a
+			jr @+lowbitdone
+
+			@noadjust:
+
+		@lowbitdone:
+
+			dec de
+			exx
+
+			; To here:
+			;
+			; e = initialixelCount
+			; b = x1, c = y1
+			; d = wholeStep
+			; //e = yDelta
+			; hl' = errorTerm
+			; bc' = adjustUp
+			; de' = adjustDown + 1
+			; hl = address of table
+			; top of stack = af pair with a = finalPixelCount
+
+		pop af
+		push af
+
+		srl a
+		add b
+		ld (hl), a
+
+			; will progress with a = x
+		inc l
+		dec e
+		jr z, @+noloop
+
+		@storeloop:
+
+			add d
+
+			exx
+
+				adc hl, bc		; to ensure flags set; carry is clear from the add d
+
+				jr nc, @+noextra	; no carry = negative or zero?
+
+					inc a
+					sbc hl, de		; carry will be set, but predecremented de
+
+				@noextra:
+
+			exx
+			ld (hl), a
+
+			inc l
+			dec e
+		jr nz, @-storeloop
+
+@noloop:
+		ld b, a
+		pop af
+		add b
+		ld (hl), a
+		
+		jp @+endOfPushToArray
+
+@xnegative:
+		; negate x delta, store to d
+		neg
+		ld d, a
+
+		; positive xdelta is in a, compare to positive ydelta from e
+		cp e
+
+		jr z, @+diagonalxneg
+		jr nc, @+xdeltagreaterxneg
+
+		; y delta is greater, x delta is positive - traditional Bresenham
+
+		; use a for delta
+		ld a, e
+		srl a
+
+		ld c, e
+
+	@xdgxnloop:
+		ld (hl), b
+
+		sub d
+		jr nc, @+noxinc
+
+		dec b
+		add e
+
+		@noxinc:
+		inc l
+		dec c
+		jr nz, @-xdgxnloop
+
+		jr @+endOfPushToArray
+
+	@diagonalxneg:
+		ld c, b
+		ld b, d
+
+	@diagonalloop:
+		ld (hl), c
+		dec c
+		djnz @-diagonalloop
+
+		jr @+endOfPushToArray
+
+	@xdeltagreaterxneg:
+
+		; x delta is greater, is positive
+		xor a
+		push de
+
+		call DIV88		; now d = xDelta / yDelta, a = xDelta % yDelta
+
+		; aiming for:
+		; errorTerm = HL', adjustUp = BC', adjustDown = DE'
+
+		exx
+		pop de
+		ld d, 0
+		sla e
+		rl d			; de = adjustDown
+
+		ld b, 0
+		ld c, a			; bc = adjustUp >> 1
+
+		ld h, b
+		ld l, c
+		and a
+		sbc hl, de		; hl = errorTerm
+
+		sla c
+		rl b			; bc = adjustUp
+
+		exx
+
+		ld a, d
+		srl a
+		inc a			; a = initialPixelCount = finalPixelCount, d = wholeStep
+
+		push af			; store for finalPixelCount
+
+		ld a, d
+		sra a			; test for wholeStep&1
+		exx
+		jr nc, @+nolowbit
+
+			; errorTerm += yDelta (double errorTerm, add adjustDown, halve it)
+			add hl, hl
+			add hl, de
+			sra h
+			rr l
+
+		jr @+lowbitdone
+
+		@nolowbit:
+			; if !adjustUp then initialPixelCount--
+			ld (@+astorepos+1), a
+
+			ld a, b
+			or c
+
+			@astorepos:
+			ld a, 23
+
+			jr nz, @+noadjust
+
+			exx
+
+			dec a
+			jr @+lowbitdone
+
+			@noadjust:
+
+		@lowbitdone:
+
+			dec de
+			exx
+
+			; To here:
+			;
+			; e = initialixelCount
+			; b = x1, c = y1
+			; d = wholeStep
+			; hl' = errorTerm - 1
+			; bc' = adjustUp
+			; de' = adjustDown - 1
+			; hl = address of table
+			; top of stack = af pair with a = finalPixelCount
+
+		pop af
+		push af
+
+		srl a
+		neg
+		add b
+		ld (hl), a
+
+			; will progress with a = x
+		inc l
+		dec e
+		jr z, @+noloop
+
+		@storeloop:
+
+			sub d
+
+			exx
+
+				adc hl, bc		; to ensure flags set; carry is clear from the sub d
+
+				jp nc, @+noextra	; no carry = negative or zero?
+
+					dec a
+					sbc hl, de		; carry will be set, but predecremented de
+
+				@noextra:
+
+			exx
+			ld (hl), a
+
+			inc l
+			dec e
+		jr nz, @-storeloop
+
+@noloop:
+		pop bc
+		sub b
+		ld (hl), a
+
+		jr @+endOfPushToArray
+
+@vertical:
+	; positive xdelta is in a, compare to positive ydelta from e
+	
+	ld l, c
+	ld c, b
+	ld b, e
+
+	@vloop:
+
+		ld (hl), c
+		inc l
+		djnz @-vloop
+
+
+@endOfPushToArray:
+	pop hl
+	pop bc
+	pop af
+	pop de
+
+	ret
+
+@SPBackup:
+	dw 0
+
+;
+;	DIV88 - 8 bit divide with remainder; adapted from slightly broken version
+;	at http://map.grauw.nl/sources/external/z80bits.html
+;
+; input: d = dividend, e = divisor, a = 0
+; output: d = quotient, a = remainder
+;
+; clobbered: f
+;
+; takes between 243 and 351 cycles
+;
+
+DIV88:
+
+	sla d
+	rla
+	cp e
+	jr c, @+C1
+
+@NC0:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C2
+
+@NC1:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C3
+	
+@NC2:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C4
+	
+@NC3:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C5
+	
+@NC4:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C6
+	
+@NC5:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C7
+	
+@NC6:
+	sub e
+	sl1 d
+	rla
+	cp e
+	jr c, @+C8
+
+@NC7:
+	sub e
+	sl1 d
+	ret
+	
+@C1:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC1
+
+@C2:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC2
+
+@C3:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC3
+
+@C4:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC4
+
+@C5:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC5
+
+@C6:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC6
+
+@C7:
+	sla d
+	rla
+	cp e
+	jr nc, @-NC7
+
+@C8:
+	sla d
+	rla
+	ret
+
+
+;			ld d, l
+;			ld e, a
+;			scf
+;			rr d
+;			rr e
+;			
+;			jr nc, @+rpx
+;
+;				ld a, (de)
+;				and 0xf0
+;				or 0x0c
+;				jr @+pxd
+;			
+;			@rpx:
+;;			
+;				ld a, (de)
+;				and 0x0f
+;				or 0xc0
+;				
+;			@pxd:
+;			ld (de), a
+;
+;			ld d, l
+;			ld e, c
+;			scf
+;			rr d
+;			rr e
+;			
+;			jr nc, @+rpx
+;			
+;				ld a, (de)
+;				and 0xf0
+;				or 0x0e
+;				jr @+pxd
+;				
+;			@rpx:
+;				ld a, (de)
+;				and 0x0f
+;				or 0xe0
+;				
+;			@pxd:
+;			ld (de), a
+;			
+;	ret

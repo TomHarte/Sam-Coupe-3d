@@ -1,0 +1,676 @@
+;
+;	Old style models
+;
+
+@points:
+@point1:
+	dw 18, 0, 40
+	ds 26
+@point5:
+	dw -18, -7, -40
+	ds 26
+@point6:
+	dw -30, 0, -40
+	ds 26
+@point7:
+	dw -30, 0, -24
+	ds 26
+@point9:
+	dw 18, 7, -40
+	ds 26
+@point11:
+	dw 18, 7, 13
+	ds 26
+@point13:
+	dw 18, -7, 13
+	ds 26
+@point15:
+	dw 11, 3, 29
+	ds 26
+@point16:
+	dw 11, 4, 24
+	ds 26
+@point17:
+	dw -11, 4, 2
+	ds 26
+
+@faces:
+@face0:
+	dw 0, 247, -64
+	dw 10
+	db 0
+	db 0
+@face1:
+	dw 0, -247, -64
+	dw 10
+	db 0
+	db 0
+@face4:
+	dw -205, 148, -38
+	dw 20
+	db 0
+	db 0
+@face5:
+	dw -205, -148, -38
+	dw 20
+	db 0
+	db 0
+@face8:
+	dw 0, 0, 256
+	dw 40
+	db 0
+	db 0
+@face9:
+	dw 0, 255, 0
+	dw 6
+	db 0
+	db 0
+@face10:
+	dw 128, 221, 0
+	dw 15
+	db 0
+	db 0
+@face11:
+	dw 128, -221, 0
+	dw 15
+	db 0
+	db 0
+@face12:
+	dw 0, -255, 0
+	dw 6
+	db 0
+	db 0
+
+@edges:
+	dw @-face0+8, @-face1+8
+	dw @-point1, @-point1+19
+	dw @-point1, @-point1+8
+	db 0xff
+	dw @-face0+8, @-face4+8
+	dw @-point1, @-point1+8
+	dw @-point13, @-point13+8
+	db 0xff
+	dw @-face0+8, @-face9+8
+	dw @-point13, @-point13+8
+	dw @-point13, @-point13+19
+	db 0xff
+	dw @-face0+8, @-face4+9
+	dw @-point13, @-point13+19
+	dw @-point1, @-point1+19
+	db 0xff
+	dw @-face1+8, @-face12+8
+	dw @-point11, @-point11+19
+	dw @-point11, @-point11+8
+	db 0xff
+	dw @-face1+8, @-face5+8
+	dw @-point11, @-point11+8
+	dw @-point1, @-point1+8
+	db 0xff
+	dw @-face1+8, @-face5+9
+	dw @-point1, @-point1+19
+	dw @-point11, @-point11+19
+	db 0xff
+	dw @-face5+9, @-face11+8
+	dw @-point7, @-point7+8
+	dw @-point11, @-point11+19
+	db 0xff
+	dw @-face5+9, @-face4+9
+	dw @-point1, @-point1+19
+	dw @-point7, @-point7+8
+	db 0xff
+	dw @-face4+9, @-face10+8
+	dw @-point13, @-point13+19
+	dw @-point7, @-point7+8
+	db 0xff
+	dw @-face4+8, @-face5+8
+	dw @-point1, @-point1+8
+	dw @-point7, @-point7+19
+	db 0xff
+	dw @-face4+8, @-face10+9
+	dw @-point7, @-point7+19
+	dw @-point13, @-point13+8
+	db 0xff
+	dw @-face5+8, @-face11+9
+	dw @-point11, @-point11+8
+	dw @-point7, @-point7+19
+	db 0xff
+	dw @-face10+9, @-face11+9
+	dw @-point7, @-point7+19
+	dw @-point6, @-point6+19
+	db 0xff
+	dw @-face10+9, @-face8+8
+	dw @-point6, @-point6+19
+	dw @-point5, @-point5+19
+	db 0xff
+	dw @-face10+9, @-face9+8
+	dw @-point5, @-point5+19
+	dw @-point13, @-point13+8
+	db 0xff
+	dw @-face11+9, @-face12+8
+	dw @-point11, @-point11+8
+	dw @-point9, @-point9+8
+	db 0xff
+	dw @-face11+9, @-face8+8
+	dw @-point9, @-point9+8
+	dw @-point6, @-point6+19
+	db 0xff
+	dw @-face8+8, @-face12+8
+	dw @-point9, @-point9+8
+	dw @-point9, @-point9+19
+	db 0xff
+	dw @-face8+8, @-face11+8
+	dw @-point9, @-point9+19
+	dw @-point6, @-point6+8
+	db 0xff
+	dw @-face8+8, @-face10+8
+	dw @-point6, @-point6+8
+	dw @-point5, @-point5+8
+	db 0xff
+	dw @-face8+8, @-face9+8
+	dw @-point5, @-point5+8
+	dw @-point5, @-point5+19
+	db 0xff
+	dw @-face9+8, @-face10+8
+	dw @-point5, @-point5+8
+	dw @-point13, @-point13+19
+	db 0xff
+	dw @-face10+8, @-face11+8
+	dw @-point6, @-point6+8
+	dw @-point7, @-point7+8
+	db 0xff
+	dw @-face11+8, @-face12+8
+	dw @-point9, @-point9+19
+	dw @-point11, @-point11+19
+	db 0xff
+Adder:
+	db 10, 9, 25					; numpoints, numfaces, numedges
+	dw @-points, @-faces, @-edges	; pointers to points, faces, edges
+	db 0
+	dw 84							; size of bounding sphere
+
+@points:
+@point4:
+	dw -128, 128, 128
+	ds 26
+@point5:
+	dw -128, -128, 128
+	ds 26
+@point6:
+	dw -128, -128, -128
+	ds 26
+@point7:
+	dw -128, 128, -128
+	ds 26
+
+@faces:
+@face1:
+	dw 256, 0, 0		; normal
+	dw 128				; distance
+	db 0				; flags
+	db 0
+@face2:
+	dw 0, 0, -256
+	dw 128
+	db 0
+	db 0
+@face3:
+	dw 0, 256, 0
+	dw 128
+	db 0
+	db 0
+@face4:
+	dw 0, 0, 256
+	dw 128
+	db 0
+	db 0
+@face5:
+	dw 0, -256, 0
+	dw 128
+	db 0
+	db 0
+
+@edges:
+	dw @-face1+9, @-face4+8
+	dw @-point7, @-point7+19
+	dw @-point6, @-point6+19
+	db 0xff
+	dw @-face1+9, @-face3+8
+	dw @-point6, @-point6+19
+	dw @-point5, @-point5+19
+	db 0xff
+	dw @-face1+9, @-face2+8
+	dw @-point5, @-point5+19
+	dw @-point4, @-point4+19
+	db 0xff
+	dw @-face1+9, @-face5+8
+	dw @-point4, @-point4+19
+	dw @-point7, @-point7+19
+	db 0xff
+	dw @-face1+8, @-face2+8
+	dw @-point4, @-point4+8
+	dw @-point5, @-point5+8
+	db 0xff
+	dw @-face1+8, @-face3+8
+	dw @-point5, @-point5+8
+	dw @-point6, @-point6+8
+	db 0xff
+	dw @-face1+8, @-face4+8
+	dw @-point6, @-point6+8
+	dw @-point7, @-point7+8
+	db 0xff
+	dw @-face1+8, @-face5+8
+	dw @-point7, @-point7+8
+	dw @-point4, @-point4+8
+	db 0xff
+	dw @-face2+8, @-face5+8
+	dw @-point4, @-point4+8
+	dw @-point4, @-point4+19
+	db 0xff
+	dw @-face2+8, @-face3+8
+	dw @-point5, @-point5+19
+	dw @-point5, @-point5+8
+	db 0xff
+	dw @-face3+8, @-face4+8
+	dw @-point6, @-point6+19
+	dw @-point6, @-point6+8
+	db 0xff
+	dw @-face4+8, @-face5+8
+	dw @-point7, @-point7+19
+	dw @-point7, @-point7+8
+	db 0xff
+Cube:
+	db 4, 5, 12
+	dw @-points, @-faces, @-edges
+	db 0
+	dw 617
+
+@points:
+@point1:
+	dw -32, 0, 76
+	ds 26
+@point2:
+	dw 0, 26, 24
+	ds 26
+@point4:
+	dw 120, -3, -8
+	ds 26
+@point6:
+	dw 88, 16, -40
+	ds 26
+@point8:
+	dw -128, -8, -40
+	ds 26
+@point9:
+	dw 0, 26, -40
+	ds 26
+@point11:
+	dw 32, -24, -40
+	ds 26
+@point14:
+	dw 8, 12, -40
+	ds 26
+@point15:
+	dw 36, 8, -40
+	ds 26
+@point18:
+	dw -8, -16, -40
+	ds 26
+@point19:
+	dw -36, -12, -40
+	ds 26
+@point20:
+	dw 0, 0, 76
+	ds 26
+@point21:
+	dw 0, 0, 90
+	ds 26
+@point25:
+	dw 80, 6, -40
+	ds 26
+@point26:
+	dw 88, 0, -40
+	ds 26
+@point27:
+	dw 80, -6, -40
+	ds 26
+
+@faces:
+@face0:
+	dw 0, -228, -114
+	dw 33
+	db 0
+	db 0
+@face1:
+	dw 0, 250, -51
+	dw 15
+	db 0
+	db 0
+@face5:
+	dw 77, -233, -69
+	dw 30
+	db 0
+	db 0
+@face6:
+	dw 72, -236, -67
+	dw 29
+	db 0
+	db 0
+@face7:
+	dw 41, 247, -49
+	dw 20
+	db 0
+	db 0
+@face9:
+	dw -28, -254, 0
+	dw 25
+	db 0
+	db 0
+@face11:
+	dw -131, -219, 1
+	dw 59
+	db 0
+	db 0
+@face12:
+	dw 0, 0, 256
+	dw 40
+	db 0
+	db 0
+
+@edges:
+	dw @-face0+8, @-face1+8
+	dw @-point1, @-point1+19
+	dw @-point1, @-point1+8
+	db 0xff
+	dw @-face0+8, @-face5+8
+	dw @-point1, @-point1+8
+	dw @-point2, @-point2+8
+	db 0xff
+	dw @-face0+8, @-face5+9
+	dw @-point2, @-point2+8
+	dw @-point1, @-point1+19
+	db 0xff
+	dw @-face1+8, @-face12+8
+	dw @-point11, @-point11+8
+	dw @-point11, @-point11+19
+	db 0xff
+	dw @-face1+8, @-face7+8
+	dw @-point11, @-point11+19
+	dw @-point1, @-point1+8
+	db 0xff
+	dw @-face1+8, @-face7+9
+	dw @-point1, @-point1+19
+	dw @-point11, @-point11+8
+	db 0xff
+	dw @-face5+9, @-face9+8
+	dw @-point2, @-point2+8
+	dw @-point6, @-point6+8
+	db 0xff
+	dw @-face5+9, @-face6+9
+	dw @-point6, @-point6+8
+	dw @-point1, @-point1+19
+	db 0xff
+	dw @-face6+9, @-face11+8
+	dw @-point6, @-point6+8
+	dw @-point4, @-point4+8
+	db 0xff
+	dw @-face6+9, @-face7+9
+	dw @-point4, @-point4+8
+	dw @-point1, @-point1+19
+	db 0xff
+	dw @-face7+9, @-face11+8
+	dw @-point4, @-point4+8
+	dw @-point8, @-point8+19
+	db 0xff
+	dw @-face7+9, @-face12+8
+	dw @-point8, @-point8+19
+	dw @-point11, @-point11+8
+	db 0xff
+	dw @-face5+8, @-face9+9
+	dw @-point6, @-point6+19
+	dw @-point2, @-point2+8
+	db 0xff
+	dw @-face5+8, @-face6+8
+	dw @-point1, @-point1+8
+	dw @-point6, @-point6+19
+	db 0xff
+	dw @-face6+8, @-face7+8
+	dw @-point1, @-point1+8
+	dw @-point4, @-point4+19
+	db 0xff
+	dw @-face6+8, @-face11+9
+	dw @-point4, @-point4+19
+	dw @-point6, @-point6+19
+	db 0xff
+	dw @-face7+8, @-face12+8
+	dw @-point11, @-point11+19
+	dw @-point8, @-point8+8
+	db 0xff
+	dw @-face7+8, @-face11+9
+	dw @-point8, @-point8+8
+	dw @-point4, @-point4+19
+	db 0xff
+	dw @-face9+9, @-face12+8
+	dw @-point6, @-point6+19
+	dw @-point9, @-point9+8
+	db 0xff
+	dw @-face9+9, @-face9+8
+	dw @-point9, @-point9+8
+	dw @-point2, @-point2+8
+	db 0xff
+	dw @-face9+8, @-face12+8
+	dw @-point9, @-point9+8
+	dw @-point6, @-point6+8
+	db 0xff
+	dw @-face11+9, @-face12+8
+	dw @-point8, @-point8+8
+	dw @-point6, @-point6+19
+	db 0xff
+	dw @-face11+8, @-face12+8
+	dw @-point6, @-point6+8
+	dw @-point8, @-point8+19
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point25, @-point25+8
+	dw @-point26, @-point26+8
+	db 0x33
+	dw @-face12+8, @-face12+8
+	dw @-point26, @-point26+8
+	dw @-point27, @-point27+8
+	db 0x33
+	dw @-face12+8, @-face12+8
+	dw @-point27, @-point27+8
+	dw @-point25, @-point25+8
+	db 0x33
+	dw @-face12+8, @-face12+8
+	dw @-point27, @-point27+19
+	dw @-point25, @-point25+19
+	db 0x33
+	dw @-face12+8, @-face12+8
+	dw @-point25, @-point25+19
+	dw @-point26, @-point26+19
+	db 0x33
+	dw @-face12+8, @-face12+8
+	dw @-point26, @-point26+19
+	dw @-point27, @-point27+19
+	db 0x33
+	dw @-face12+8, @-face12+8
+	dw @-point15, @-point15+19
+	dw @-point14, @-point14+19
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point14, @-point14+19
+	dw @-point18, @-point18+8
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point18, @-point18+8
+	dw @-point19, @-point19+8
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point19, @-point19+8
+	dw @-point15, @-point15+19
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point14, @-point14+8
+	dw @-point15, @-point15+8
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point15, @-point15+8
+	dw @-point19, @-point19+19
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point19, @-point19+19
+	dw @-point18, @-point18+19
+	db 0xff
+	dw @-face12+8, @-face12+8
+	dw @-point18, @-point18+19
+	dw @-point14, @-point14+8
+	db 0xff
+	dw @-face0+8, @-face1+8
+	dw @-point20, @-point20+8
+	dw @-point21, @-point21+8
+	db 0xff
+CobraMk3:
+	db 16, 8, 38
+	dw @-points, @-faces, @-edges
+	db 0
+	dw 225
+
+@points:
+@point2:
+	dw 108, 0, 108
+	ds 26
+@point3:
+	dw 108, 0, -108
+	ds 26
+@point4:
+	dw -111, -200, -160
+	ds 26
+@point5:
+	dw -111, -200, 160
+	ds 26
+@point6:
+	dw 209, -200, 160
+	ds 26
+@point7:
+	dw 209, -200, -160
+	ds 26
+@point8:
+	dw 0, -300, 0
+	ds 26
+
+@faces:
+@face0:
+	dw 255, -3, 0
+	dw 107
+	db 0
+	db 0
+@face1:
+	dw 0, -64, -247
+	dw 104
+	db 0
+	db 0
+@face2:
+	dw -228, -115, 0
+	dw 96
+	db 0
+	db 0
+@face3:
+	dw 0, -64, 247
+	dw 104
+	db 0
+	db 0
+@face4:
+	dw 171, 190, 0
+	dw 222
+	db 0
+	db 0
+@face5:
+	dw 0, 217, -135
+	dw 254
+	db 0
+	db 0
+@face6:
+	dw -110, 230, 0
+	dw 270
+	db 0
+	db 0
+@face7:
+	dw 0, 217, 135
+	dw 254
+	db 0
+	db 0
+@face8:
+	dw 0, -256, 0
+	dw 0
+	db 0
+	db 0
+@edges:
+	dw @-face0+8, @-face8+8
+	dw @-point3, @-point3+19
+	dw @-point2, @-point2+19
+	db 0xaa
+	dw @-face0+8, @-face1+8
+	dw @-point2, @-point2+19
+	dw @-point5, @-point5+8
+	db 0xaa
+	dw @-face0+8, @-face4+8
+	dw @-point5, @-point5+8
+	dw @-point4, @-point4+8
+	db 0xee
+	dw @-face0+8, @-face3+8
+	dw @-point4, @-point4+8
+	dw @-point3, @-point3+19
+	db 0xaa
+	dw @-face1+8, @-face8+8
+	dw @-point2, @-point2+19
+	dw @-point2, @-point2+8
+	db 0xaa
+	dw @-face1+8, @-face2+8
+	dw @-point2, @-point2+8
+	dw @-point6, @-point6+8
+	db 0xaa
+	dw @-face1+8, @-face5+8
+	dw @-point6, @-point6+8
+	dw @-point5, @-point5+8
+	db 0xee
+	dw @-face2+8, @-face8+8
+	dw @-point2, @-point2+8
+	dw @-point3, @-point3+8
+	db 0xaa
+	dw @-face2+8, @-face3+8
+	dw @-point3, @-point3+8
+	dw @-point7, @-point7+8
+	db 0xaa
+	dw @-face2+8, @-face6+8
+	dw @-point7, @-point7+8
+	dw @-point6, @-point6+8
+	db 0xee
+	dw @-face3+8, @-face8+8
+	dw @-point3, @-point3+8
+	dw @-point3, @-point3+19
+	db 0xaa
+	dw @-face3+8, @-face7+8
+	dw @-point4, @-point4+8
+	dw @-point7, @-point7+8
+	db 0xee
+	dw @-face4+8, @-face5+8
+	dw @-point5, @-point5+8
+	dw @-point8, @-point8+8
+	db 0xee
+	dw @-face4+8, @-face7+8
+	dw @-point8, @-point8+8
+	dw @-point4, @-point4+8
+	db 0xee
+	dw @-face5+8, @-face6+8
+	dw @-point6, @-point6+8
+	dw @-point8, @-point8+8
+	db 0xee
+	dw @-face6+8, @-face7+8
+	dw @-point7, @-point7+8
+	dw @-point8, @-point8+8
+	db 0xee
+House:
+	db 7, 9, 16
+	dw @-points, @-faces, @-edges
+	db 0
+	dw 552

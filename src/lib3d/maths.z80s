@@ -1,0 +1,670 @@
+;
+;	DIV2010, works out a:de / bc and stores it to hl
+;
+DIV2010:
+	and a
+	jp p, @+check2
+	
+	; a:de is negative
+	ld h, a
+	ld a, b
+	and a
+	ld a, h
+	jp p, @+divnegpos
+
+	; a:de and bc are negative
+	ld hl, 0
+	sbc hl, bc
+	ld b, h
+	ld c, l
+	ld hl, 0
+	and a
+	sbc hl, de
+	ex de, hl
+	ld h, a
+	ld a, 0		;eor would set flags
+	sbc h
+	jr @+divpospos
+	
+	@check2:
+	;a:de is positive
+	ld h, a
+	ld a, b
+	and a
+	ld a, h
+	jp m, @+divposneg
+
+	@divpospos: 
+		ld hl, 0
+
+		@LOOP:EQU FOR 24
+			sl1	e		; unroll 24 times
+			rl	d		; ...
+			rla			; ...
+			adc	hl,hl		; ...
+			sbc	hl,bc		; ...
+			jr	nc,$+4		; ...
+			add	hl,bc		; ...
+			dec	e		; ...
+			NEXT @LOOP
+
+		ex de, hl
+
+		ret
+
+@divnegpos:
+	; negate a:de
+	ld hl, 0
+	and a
+	sbc hl, de
+	ex de, hl
+	ld h, a
+	ld a, 0		; eor would set flags
+	sbc h
+	call @-divpospos
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, de
+	ret
+
+@divposneg:
+	; negate bc
+	ld hl, 0
+	and a
+	sbc hl, bc
+	ld b, h
+	ld c, l
+	call @-divpospos
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, de
+	ret
+
+;
+;	FIXDIV, works out BC / DE and stores it to HL (all 8.8 fixed point)
+;
+;	clobbers: a
+;
+FIXDIV:
+	; check signs
+	ld a, b
+	and a
+	jp p, @+check2
+
+	; bc is negative
+	ld a, d
+	and a
+	jp p, @+divnegpos
+
+	; if we get to here then both are negative. Easy...
+	ld hl, 0
+	sbc hl, de
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, bc
+	ld b, h
+	ld c, l
+	jr @+divpospos
+
+@check2:
+	; bc is positive
+	ld a, d
+	and a
+	jp m, @+divposneg	;jump if de is negative too
+
+@divpospos:
+	ld hl, 0
+
+@DIVLOOP1: EQU FOR 8
+	sla b
+	rl l			; lb <<= 1
+
+	sbc hl, de		; find hl - de (nb: carry is definitely clear, so sbc is equivalent to sub)
+	jr nc, @+noadd		; if hl was larger than de then obviously it was wrong as it's the remainder
+
+	add hl, de		; oh, hl was smaller - so add de back in again
+@noadd:
+	NEXT @DIVLOOP1
+
+				; get to here and b is the lowest byte of the answer, which we just throw away
+dtpos:
+@DIVLOOP2: EQU FOR 8
+	sl1 c
+	adc hl, hl		; hlc = (hlc << 1) | 1
+
+	sbc hl, de		; find hl - de (carry definitely clear)
+	jr nc, @+noadd		; if hl was is larger than de then obviously it was wrong as it's the remainder
+
+	add hl, de		; oh, hl was smaller than de - so add de back in again
+	dec c			; remove bottom bit of c
+@noadd:
+	NEXT @DIVLOOP2
+
+				; c is now the middle byte of the answer ...
+
+@DIVLOOP3: EQU FOR 8
+	sl1 b
+
+	add hl, hl		; double answer - NB carry from sl1 b ignored, so it's as though b = 0 at start of loop
+	and a			; need to clear carry - add hl, hl may overflow from here on out
+	sbc hl, de		; find hl - de (sub hl, de would be better here)
+	jr nc, @+noadd		; if hl was is larger than de then obviously it was wrong as it's the remainder
+
+	add hl, de		; oh, hl was smaller than de - so add de back in again and remove bottom bit of c
+	dec b			; remove bottom bit of c
+@noadd:
+	NEXT @DIVLOOP3
+
+				; ... and b is low byte of the answer
+
+	ld h, c			; put b and c into hl, but the other way round
+	ld l, b
+dlend:	RET
+
+@divnegpos:
+	; negate bc
+	ld hl, 0
+	and a
+	sbc hl, bc
+	ld b, h
+	ld c, l
+	call @-divpospos
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, de
+	ret
+
+@divposneg:
+	; negate de
+	ld hl, 0
+	and a
+	sbc hl, de
+	ex hl, de
+	call @-divpospos
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, de
+	ret
+
+;
+;	FIXMUL, works out BC * DE and stores it into HL
+;	use FIXMULADD to just add BC * DE to HL
+;
+;	clobbers: a, bc, de
+;
+						; work out as HL = D * BC + (E * (BC >> 8))
+FIXMUL:
+	ld hl, 0			; clear hl
+FIXMULADD:
+	push bc				; backup bc
+	ld a, d
+
+@MULLOOP1: EQU FOR 7
+	rra
+	jr nc, @+noadd		; check if current low bit of d is set, skip add otherwise
+
+	add hl, bc			; add bc to hl
+@noadd:	
+	sla c
+	rl b				; multiply bc by 2 (16 cycles, 4 bytes)
+
+	NEXT @MULLOOP1		; pyz80 pseudo-op - repeat everything above 7 times
+
+	rra
+	jr nc, @+nosub		; check if current low bit of de is set, skip subtract otherwise
+
+	xor a
+	sbc hl, bc			; subtract bc from hl (because we just tested the top bit and 
+						; it's a signed multiply)
+
+@nosub:	
+	pop bc				; recover bc, to do ((E * BC) >> 8)
+
+	ld d, c				; load d with c
+
+	ld a, b				; load c with b, and b with the sign extension of bc, 20 cycles
+	add a, a
+	sbc a, a
+	ld c, b
+	ld b, a
+
+	ld a, e				; put e into a, because rra is faster than rr e
+
+@MULLOOP2: EQU FOR 7	; final add is done after loop
+	rra
+	jr nc, @+noadd
+
+	add hl, bc
+@noadd: 
+	sla d				; this time shift bc:d to make adder
+	rl c
+	rl b
+
+	NEXT @MULLOOP2
+
+	rra
+	ret nc
+
+	add hl, bc
+
+	; done
+	ret
+
+;
+;	LONGMUL1010, works out BC * DE and stores it into A:HL
+;
+;	clobbers: a, bc, de
+;
+@Sign: dw 0
+
+						; work out as HL = D * BC + ((E * BC) >> 8)
+LONGMUL1010:
+	xor a
+	ld h, a
+	ld l, a				; clear a:hl
+	
+		; backup de
+		push de
+
+		; get sign extension of bc
+	sla b
+	sbc a, 0
+	rr b
+	ld d, a
+	xor a
+
+@MULLOOP1: EQU FOR 8
+	rr e
+	jr nc, @+noadd		; check if current low bit of d is set, skip add otherwise
+
+	add hl, bc			; add bc to hl
+	adc d
+@noadd:	
+	sla c
+	rl b				; multiply bc by 2
+	rl d
+
+	NEXT @MULLOOP1		; pyz80 pseudo-op - repeat everything above 7 times
+
+		ld (@-Sign), a
+		ld a, d
+		pop de				; recover de
+		ld e, a
+		ld a, (@-Sign)
+
+@MULLOOP2: EQU FOR 3
+	rr d
+	jr nc, @+noadd
+
+	add hl, bc
+	adc e
+@noadd: 
+	sla c				; this time shift bc:d to make adder
+	rl b
+	rl e
+
+	NEXT @MULLOOP2
+
+	rr d
+	ret nc
+
+	and a
+	sbc hl, bc
+	sbc e
+
+	; done
+	ret
+
+;
+;	FIXMUL1610, works out BC * DE and stores it into HL
+;	use FIXMUL1610ADD to just add BC * DE to HL
+;
+;	DE is a 10 bit number, BC is a 16 bit number
+;
+;	clobbers: a, bc, de
+;
+						; work out as HL = D * BC + ((E * BC) >> 8)
+FIXMUL1610:
+	ld hl, 0			; clear hl
+FIXMUL1610ADD:
+	push bc				; backup bc
+
+	ld a, d
+	rra
+	jr nc, @+noadd		; check if current low bit of d is set, skip add otherwise
+
+	add hl, bc			; add bc to hl
+@noadd:	
+	sla c
+	rl b				; multiply bc by 2
+
+	rra
+	jr nc, @+nosub		; check if current low bit of de is set, skip subtract otherwise
+
+	and a
+	sbc hl, bc			; subtract bc from hl (because we just tested the top bit and 
+						; it's a signed multiply)
+@nosub:
+
+	pop bc				; recover bc, to do ((E * BC) >> 8)
+
+	ld d, c				; load d with c, c with b, and b with the sign extension of bc
+	ld a, b
+	add a, a
+	sbc a, a
+	ld c, b
+	ld b, a
+
+	ld a, e
+
+@MULLOOP2: EQU FOR 7
+	rra
+	jr nc, @+noadd
+
+	add hl, bc
+@noadd: 
+	sla d				; this time shift bc:d to make adder
+	rl c
+	rl b
+
+	NEXT @MULLOOP2
+
+	rra
+	ret nc
+
+	add hl, bc
+
+	; done
+	ret
+
+;
+;	FIXMUL1610, works out BC * DE and stores it into HL
+;	use FIXMUL1610ADD to just add BC * DE to HL
+;
+;	DE is a 10 bit number, BC is a 16 bit number
+;
+;	clobbers: a, bc, de
+;
+						; work out as HL = D * BC + ((E * BC) >> 8)
+FIXMUL1612_LONG:
+	ld hl, 0			; clear hl
+	xor a
+FIXMUL1612_LONGADD:
+	push bc				; backup bc and de
+	push de
+
+		; sign extend b into e
+	push af
+	ld a, b
+	add a, a
+	sbc a, a
+	ld e, a
+	pop af
+
+@MULLOOP1: EQU FOR 3
+	srl d
+	jr nc, @+noadd		; check if current low bit of d is set, skip add otherwise
+
+	add hl, bc			; add bc to hl
+	adc a, e
+@noadd:	
+	sla c
+	rl b				; multiply a:bc by 2
+	rl e
+	
+	NEXT @MULLOOP1
+
+	srl d
+	jr nc, @+nosub		; check if current low bit of de is set, skip subtract otherwise
+
+	and a
+	sbc hl, bc			; subtract bc from hl (because we just tested the top bit and 
+						; it's a signed multiply)
+	sbc a, e
+@nosub:
+
+	pop de
+	pop bc				; recover bc, to do ((E * BC) >> 8)
+	push af
+
+	ld d, c				; load d with c, c with b, and b with the sign extension of bc
+	ld a, b
+	add a, a
+	sbc a, a
+	ld c, b
+	ld b, a
+	
+	and a
+	jp m, @+loopneg
+
+	pop af
+
+@MULLOOP2: EQU FOR 7
+	srl e
+	jr nc, @+noadd
+
+	add hl, bc
+	adc a, 0
+@noadd: 
+	sla d				; this time shift bc:d to make adder
+	rl c
+	rl b
+
+	NEXT @MULLOOP2
+
+	srl e
+	ret nc
+
+	add hl, bc
+	adc a, 0
+
+	; done
+	ret
+
+@loopneg:
+	pop af
+
+@MULLOOP2: EQU FOR 7
+	srl e
+	jr nc, @+noadd
+
+	add hl, bc
+	adc a, 0xff
+@noadd: 
+	sla d				; this time shift bc:d to make adder
+	rl c
+	rl b
+
+	NEXT @MULLOOP2
+
+	srl e
+	ret nc
+
+	add hl, bc
+	adc a, 0xff
+
+	; done
+	ret
+
+;
+;	U8S16MUL, A * DE -> HL (unsigned 8 bit * signed 16 bit)
+;
+;	clobbers: bc
+;
+;U8S16MUL:
+;	ld hl, 0
+;
+;U8S16MULADD:
+;	ld b, a		; backup a
+;
+;	ld a, d		; work out sign extend of de
+;	add a, a
+;	sbc a, a
+;
+;	ld c, e		; shift dec right 8
+;	ld e, d
+;	ld d, a
+;
+;	ld a, b		; restore a
+;	
+;
+;@S8MADDLOOP: EQU FOR 7
+;	rra
+;	jr nc, @+noadd
+;	add hl, de
+;@noadd:
+;	sla b
+;	rl e
+;	rl d
+;
+;	NEXT @S8MADDLOOP
+;
+;	rra
+;	jr nc, @+noadd
+;	add hl, de
+;@noadd:
+;	ret
+
+
+;
+;	UFIXMUL, works out BC * DE and stores it into HL
+;	use UFIXMULADD to just add BC * DE to HL
+;
+;	clobbers: a
+;
+				; work out as HL = D * BC + ((E * BC) >> 8)
+;UFIXMUL:
+;	ld hl, 0		; clear hl
+;UFIXMULADD:
+;	push bc			; backup bc
+;
+;@MULLOOP1: EQU FOR 7
+;	rr d
+;	jr nc, @+noadd		; check if current low bit of de is set, skip add otherwise
+;
+;	add hl, bc		; add bc to hl
+;@noadd:	sla c
+;	rl b			; multiply bc by 2
+;
+;	NEXT @MULLOOP1
+;	rr d
+;	jr nc, @+noadd		; check if current low bit of de is set, skip add otherwise
+;
+;	add hl, bc
+;
+;@noadd:	
+;	pop bc			; recover bc, to do ((E * BC) >> 8)
+;	push hl			; backup hl, for adding later
+;	ld hl, 0		; clear hl
+;
+;	; load d with sign extension of bc
+;	ld a, b
+;	add a, a
+;	sbc a, a
+;	ld d, a
+;
+;	; ld a with 0
+;	ld a, 0
+;
+;@MULLOOP2: EQU FOR 7
+;	rr e
+;	jr nc, @+noadd
+;
+;	add hl, bc
+;	adc d
+;@noadd: sla c
+;	rl b
+;
+;	NEXT @MULLOOP2
+;
+;	rr e
+;	jr nc, @+noadd
+;
+;	add hl, bc
+;	adc d
+;@noadd: 
+;
+;	; shift a:hl right by 8
+;	ld l, h
+;	ld h, a
+;
+;	; pop value of original multiplication, and add
+;	pop bc
+;	add hl, bc
+;
+;	; done
+;	ret
+
+;
+;	FIXMUL1010, works out BC * DE, assuming both only have 10 bit accuracy and stores it into HL
+;
+;	clobbers: de, bc
+;
+FIXMUL1010:
+		ld h, d
+		ld l, e
+		add hl, bc			; get a + b
+
+		ex de, hl
+		and a
+		sbc hl, bc			; get a - b
+		sla h				; get address of a - b
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc now contains (a - b)^2
+
+		ex de, hl
+		sla h				; get address of a + b
+		ld e, (hl)
+		inc h
+		ld d, (hl)			; de now contains (a + b)^2
+
+		ex de, hl
+		and a
+		sbc hl, bc
+		ret
+
+; DE is 10bit
+;NFIXMUL1610:
+;	ld a, b
+;	and 0x0f
+;	ld b, a
+
+;
+;	FIXMUL1010ADD, works out HL * DE, assuming both only have 10 bit accuracy and adds it to HL
+;
+;	clobbers: de, bc
+;
+FIXMUL1010ADD:
+
+		push hl
+
+		ld h, d
+		ld l, e
+		add hl, bc			; get a + b
+
+		ex de, hl
+		and a
+		sbc hl, bc			; get a - b
+		sla h				; get address of a - b
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc now contains (a - b)^2
+
+		ex de, hl
+		sla h				; get address of (a + b)^2
+		ld e, (hl)
+		inc h
+		ld d, (hl)			; de now contains (a + b)^2
+
+		pop hl				; restore original value to hl
+		add hl, de
+		and a
+		sbc hl, bc
+
+	ret

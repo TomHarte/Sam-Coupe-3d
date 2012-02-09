@@ -1,0 +1,67 @@
+; paging registers
+;
+;	LMPR - low 5 bits = page,	bit 5 = set high to use RAM in 0-16383
+;					bit 6 = set low to use RAM in 49152-65535
+;					bit 7 = set high to write protect low 16kb
+;
+LMPR:		EQU 250
+;
+;	HMPR - low 5 bits = page, next 2 = mode 3 CLUT, top = use external memory
+;
+HMPR:		EQU 251
+;
+;	VMPR - low 5 bits = video page, next 2 = screen mode, top = midi
+;
+VMPR:		EQU 252
+
+;
+;	BORDER - bit 7 = screen off, bit 5 = CLUT8, bits 0Ð2 = CLUT1-4
+;
+BORDER:		EQU 254
+
+MIDIOUT:	EQU 253
+
+;
+;	LINEINT - write only, write scanline to generate interrupt after
+;
+LINEINT:	EQU 249
+
+;
+;	CLUTBASE - first of 16 registers containing the CLUT
+;
+CLUTBASE:	EQU 248
+
+;
+;	ATTRIBUTES - read to get GFX attributes/third byte value
+;
+ATTRIBUTES:	EQU 255
+
+;
+;	KEYBOARD - low 5 bits = keyboard matrix lines 1-5
+;			bit 5 = light pen strobe/serial input bit
+;			bit 6 = input from cassette
+;			bit 7 = high if external memory is in use
+;
+KEYBOARD:	EQU 254
+
+;
+;	STATUS - low five bits set low if interrupt is requesting...
+;			Bit 0 = line interrupt
+;			Bit 1 = mouse interrupt
+;			Bit 2 = mini input interrupt
+;			Bit 3 = end of frame interrupt
+;			Bit 4 = midi output interrupt
+;
+;		top 3 = keyboard matrix lines 6-8
+;
+STATUS:		EQU 249
+
+;
+;	Addresses of some of the block copy/move routines in ROM
+;
+ROMLDIR:	EQU 0x008f
+ROMLDDR:	EQU 0x0092
+ROMCPIR:	EQU 0x0095
+ROMCPDR:	EQU 0x0098
+ROMOTIR:	EQU 0x009b
+ROMOTDR:	EQU 0x009e

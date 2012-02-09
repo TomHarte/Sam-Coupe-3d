@@ -1,0 +1,235 @@
+;
+;	Update.z80s
+;	-----------
+;
+;	Update is called with the number of times to update in de. Hopefully de will be small
+;
+
+XMove: dw 0
+ZMove: dw 0
+MoveQuantumPositive: ds 2
+MoveQuantumNegative: ds 2
+RotateQuantumPositive: ds 2
+RotateQuantumNegative: ds 2
+
+Update:
+;	ld de, 1
+
+	; multiply de by 4 to get a move quantum — 4/256 being how many units to move each frame
+		ex de, hl
+		add hl, hl
+		add hl, hl
+		ld (MoveQuantumPositive), hl
+
+	; store a negative version
+		ex de, hl
+		ld hl, 0
+		and a
+		sbc hl, de
+		ld (MoveQuantumNegative), hl
+
+	; multiply that by 32 to get a rotational quantum
+		add hl, hl
+		add hl, hl
+		add hl, hl
+		add hl, hl
+		add hl, hl
+		ld (RotateQuantumNegative), hl
+
+	; and get a negative version of that too
+		ex de, hl
+		ld hl, 0
+		and a
+		sbc hl, de
+		ld (RotateQuantumPositive), hl
+
+	; read joystick, keys, etc...
+	ld bc, 0xeffe
+	in b, (c)
+
+ModifyBlock: EQU PlayerInfoBlock
+
+	ld hl, 0
+	ld (ZMove), hl
+	ld (XMove), hl
+
+	ld c, b
+	rr b
+	rr b
+	jp c, @+nozinc
+		ld hl, (MoveQuantumPositive)
+		ld (ZMove), hl
+	@nozinc:
+
+	rr b
+	jp c, @+nozdec
+		ld hl, (MoveQuantumNegative)
+		ld (ZMove), hl
+	@nozdec:
+
+	rr b
+	jp c, @+noyrotpos
+		ld a, c
+		and 1
+		jr z, @+domove
+			ld hl, (ModifyBlock+INFO_ROTY)
+			ld de, (RotateQuantumPositive)
+			add hl, de
+			ld (ModifyBlock+INFO_ROTY), hl
+			jr @+noyrotpos
+		@domove:
+			ld hl, (MoveQuantumPositive)
+			ld (XMove), hl
+	@noyrotpos:
+
+	rr b
+	jp c, @+noyrotneg
+		ld a, c
+		and 1
+		jr z, @+domove
+			ld hl, (ModifyBlock+INFO_ROTY)
+			ld de, (RotateQuantumNegative)
+			add hl, de
+			ld (ModifyBlock+INFO_ROTY), hl
+			jr @+noyrotneg
+		@domove:
+			ld hl, (MoveQuantumNegative)
+			ld (XMove), hl
+	@noyrotneg:
+
+	; z movement
+
+		ld hl, (ModifyBlock+INFO_POSX)
+		ld bc, (CAMERA_ZVEC_X)
+		ld de, (ZMove)
+		call FIXMULADD
+		ld (ModifyBlock+INFO_POSX), hl
+
+		ld hl, (ModifyBlock+INFO_POSY)
+		ld bc, (CAMERA_ZVEC_Y)
+		ld de, (ZMove)
+		call FIXMULADD
+		ld (ModifyBlock+INFO_POSY), hl
+
+		ld hl, (ModifyBlock+INFO_POSZ)
+		ld bc, (CAMERA_ZVEC_Z)
+		ld de, (ZMove)
+		call FIXMULADD
+		ld (ModifyBlock+INFO_POSZ), hl
+
+	; x movement
+		ld hl, (ModifyBlock+INFO_POSX)
+		ld bc, (CAMERA_XVEC_X)
+		ld de, (XMove)
+		call FIXMULADD
+		ld (ModifyBlock+INFO_POSX), hl
+
+		ld hl, (ModifyBlock+INFO_POSY)
+		ld bc, (CAMERA_XVEC_Y)
+		ld de, (XMove)
+		call FIXMULADD
+		ld (ModifyBlock+INFO_POSY), hl
+
+		ld hl, (ModifyBlock+INFO_POSZ)
+		ld bc, (CAMERA_XVEC_Z)
+		ld de, (XMove)
+		call FIXMULADD
+		ld (ModifyBlock+INFO_POSZ), hl
+
+	; ... and some keys
+	ld bc, 0xfffe ^ 0x200
+	in a, (c)
+	rr a
+	jr c, @+nolookup
+
+			ld hl, (ModifyBlock+INFO_ROTX)
+			ld de, (RotateQuantumPositive)
+			add hl, de
+			ld (ModifyBlock+INFO_ROTX), hl
+
+	@nolookup:
+
+	ld bc, 0xfffe ^ 0x100
+	in a, (c)
+	bit 1, a
+	jr nz, @+nolookdown
+
+			ld hl, (ModifyBlock+INFO_ROTX)
+			ld de, (RotateQuantumNegative)
+			add hl, de
+			ld (ModifyBlock+INFO_ROTX), hl
+
+	@nolookdown:
+
+;jr @+skipanimation
+
+	; animation
+	add hl, hl
+	ex de, hl
+		ld hl, (CobraMk3Block+INFO_ROTY)
+		ld de, (RotateQuantumPositive)
+		add hl, de
+		ld (CobraMk3Block+INFO_ROTY), hl
+
+		ld hl, (CobraMk3Block+INFO_ROTX)
+		ld b, d
+		ld c, e
+		srl b
+		rr c
+		add hl, bc
+		add hl, de
+		ld (CobraMk3Block+INFO_ROTX), hl
+
+		ld hl, (HouseBlock3+INFO_ROTY)
+		ld de, (RotateQuantumPositive)
+		sra d
+		rr e
+		add hl, de
+		ld (HouseBlock3+INFO_ROTY), hl
+		
+		ld hl, (HouseBlock1+INFO_ROTX)
+		add hl, de
+		ld (HouseBlock1+INFO_ROTX), hl
+		ld l, h
+		ld h, SINEL >> 8
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (HouseBlock1+INFO_POSY), de
+		ld a, 64
+		sub l
+		ld l, a
+		dec h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (HouseBlock1+INFO_POSX), de
+
+		ld hl, (HouseBlock4+INFO_ROTZ)
+		ld de, (RotateQuantumPositive)
+		add hl, de
+		ld (HouseBlock4+INFO_ROTZ), hl
+
+@skipanimation:
+	ld bc, 0xfffe ^ 0x800
+	in d, (c)
+
+	rr d					; 1 - cube
+	jp c, @+nomdlchange
+		ld hl, Cube
+		ld (ObjAddr), hl
+	@nomdlchange:
+
+	rr d					; 2 - Cobra Mk3
+	jp c, @+nomdlchange
+		ld hl, CobraMk3
+		ld (ObjAddr), hl
+	@nomdlchange:
+
+	rr d					; 3 - Adder
+	jp c, @+nomdlchange
+		ld hl, Adder
+		ld (ObjAddr), hl
+	@nomdlchange:
+
+	ret

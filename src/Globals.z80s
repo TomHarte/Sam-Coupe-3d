@@ -1,0 +1,93 @@
+;
+;	Globals.z80s
+;	------------
+;
+;	Declare all data that needs to be visible to Draw.z80s, Update.z80s, Init.z80s and IRQ.z80s
+;	in this file
+;
+
+INC "Models.dat"
+
+;
+;	player info block
+;
+PlayerInfoBlock:
+	db 0xfe, 0xed, 0x00, 0x14, 0xff, 0x00, 0xa6, 0x0a, 0x00, 0x80, 0xf5
+	db 0x80, 0x47, 0x00, 0x00
+
+;	ds 15
+	dw 0
+	db 0
+	dw 0
+	db 0
+	dw 0
+	db 0				; player position
+	dw 0, 0, 0			; player rotations
+	ds 21
+
+;
+;	Cobra Mk3 test block
+;
+CobraMk3Block:
+	ds 6				; position
+	dw 0x100
+	db 0
+	dw 0, 0, 0			; rotations
+ObjAddr:
+	dw CobraMk3
+	ds 21
+
+HouseBlock1:
+	dw 0x500
+	db 0
+	dw 0
+	db 0
+	dw 0
+	db 0				; position
+	dw 0, 0x3000, 0		; rotations
+	dw House
+	ds 21
+
+HouseBlock2:
+	dw 0
+	db 0
+	dw 0x1000
+	db 0
+	dw 0
+	db 0				; position
+	dw 0, 0x3000, 0		; rotations
+	dw Cube
+	ds 21
+
+HouseBlock3:
+	dw 0
+	db 0
+	dw 0x1300
+	db 0
+	dw 0x000
+	db 0				; position
+	dw 0, 0, 0		; rotations
+	dw House
+	ds 21
+
+HouseBlock4:
+	dw 0
+	db 0
+	dw 0x000
+	db 0
+	dw 0x154e
+	db 0				; position
+	dw 0, 0, 0		; rotations
+	dw Adder
+	ds 21
+
+HouseBlock5:
+	dw 0x200
+	db 0
+	dw -0x400
+	db 0
+	dw 0x300
+	db 0				; position
+	dw 0, 0, 0		; rotations
+	dw Cube
+	ds 21

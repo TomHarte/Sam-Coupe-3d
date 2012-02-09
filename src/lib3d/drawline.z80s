@@ -1,0 +1,576 @@
+;
+;	SetLineColour - lines from now on will be in the colour 'a'
+;
+SetLineColour:
+		ld (twobyte1+1), a
+
+		push af
+		and 0xf0
+		ld (highbyte1+1), a
+		ld (highbyte2+1), a
+		ld (highbyte3+1), a
+		pop af
+		and 0x0f
+		ld (lowbyte1+1), a
+		ld (lowbyte2+1), a
+		ld (lowbyte3+1), a
+
+	ret
+
+;
+;	DrawLine - draws a line from (L, H) to (E, D)
+;	clobbers: everything except ix & iy
+;
+DrawLine:
+			ld ix, (LineTabPtr)
+			ld (ix), h
+			ld (ix+1), l
+			ld (ix+2), d
+			ld (ix+3), e
+			ld (ix+4), 0xff
+			ld bc, 4
+			add ix, bc
+			ld (LineTabPtr), ix
+
+	; one of four jumps first, to combos of x pos/neg and y pos/neg
+
+		ld a, d
+		sub h
+		ld b, a
+		jr nc, @+ypos
+
+		; y is negative
+			ld a, e
+			sub l
+			jp nc, @+xposyneg
+
+			ex de, hl	; now x and y are positive
+			ld a, d
+			sub h
+			ld b, a
+			ld a, e
+			sub l
+
+			jr @+xposypos
+
+		@ypos:
+
+		; y is positive
+			ld a, e
+			sub l
+			jr nc, @+xposypos
+
+			ex de, hl	; now x is positive, but y is negative
+			ld a, d
+			sub h
+			ld b, a
+			ld a, e
+			sub l
+
+			jp @+xposyneg
+
+	; now the routines themselves...
+
+;----------------------------------------------------------------------------------------------
+	@xposypos:
+
+		; starts with positive y difference in b, positive x difference in a
+		cp b
+		jp nc, @+xdiffgreater
+
+		@ydiffgreater:
+		ld e, b			; e = dy
+		ld d, a			; d = dx
+		ld b, e			; b = pixel count (which = dy at this stage)
+
+		ld a, e
+		srl a			; a = error = dy >> 1
+
+		; get hl into hl', turn into address load 128 to de'
+		push hl
+		exx
+			ld de, 128
+		@ydil:
+			pop hl
+			ld b, 0xf0
+			ld c, 0x0f
+
+			; convert HL into an address, and jump to plot left if necessary
+			scf
+			rr h
+			rr l
+		exx
+		jr nc, @+pelloopleft
+
+			@pelloopright:
+
+				sub d
+				jr nc, @+nojumpl
+
+					add e
+					exx
+						inc l
+					jr @+nojumprpexx
+
+				@nojumpl:
+					exx
+						add hl, de
+
+						ex af, af'
+						ld a, (hl)
+						and b
+lowbyte1:				or 0x0f
+						ld (hl), a
+						ex af, af'
+					exx
+
+			djnz @-pelloopright
+		ret
+
+			@pelloopleft:
+
+				sub d
+				jr nc, @+nojumpr
+
+					add e
+					jr @-nojumpl
+
+				@nojumpr:
+					exx
+				@nojumprpexx:
+						add hl, de
+
+						ex af, af'
+						ld a, (hl)
+						and c
+highbyte1:				or 0xf0
+						ld (hl), a
+						ex af, af'
+					exx
+
+			djnz @-pelloopleft
+		ret
+
+		@xdiffgreater:		; a = positive x difference, b = positive y difference
+
+			; if dx = dy = 0 then the code will get here
+			and a
+			ret z
+
+		ld e, b			; e = dy
+		ld d, a			; d = dx
+		ld b, a			; b = dx and pixel count
+
+		srl a			; a = error = dx >> 1
+
+		push hl
+		exx
+			ld de, 128
+		@xdil:
+			pop hl
+			ld b, 0xf0
+			ld c, 0x0f
+
+			; convert HL into an address, and do an odd plot if necessary
+			scf
+			rr h
+			rr l
+		exx
+		jr nc, @+nooddplot
+
+			sub e		; error -= dy
+			jr nc, @+noychange
+
+				add d	; error += dx
+					; y ++
+				exx
+					add hl, de
+				exx
+
+			@noychange:
+
+				dec b
+				exx
+					ex af, af'
+					ld a, (hl)
+					and b
+lowbyte2:			or 0x0f
+					ld (hl), a
+					ex af, af'
+
+					inc l
+				exx
+
+		@nooddplot:
+
+			srl b
+				jr z, @+noloop
+				push af
+
+			@dpelloop:
+
+				sub e
+				jr nc, @+noychange
+
+					; y ++
+					exx
+						add hl, de
+					exx
+
+					add d	; error += dx
+
+				@noychange:
+
+					sub e
+				jr nc, @+noychange
+
+					add d
+					ex af, af'
+
+					exx
+
+						ld a, (hl)
+						and c
+highbyte2:				or 0xf0
+						ld (hl), a
+
+						add hl, de
+
+						ld a, (hl)
+						and b
+lowbyte3:				or 0x0f
+						ld (hl), a
+					exx
+
+					ex af, af'
+					jr @+checkb
+
+				@noychange:
+					exx
+twobyte1:					ld (hl), 0xff
+					exx
+
+				@checkb:
+				exx
+					inc l
+				exx
+				djnz @-dpelloop
+
+			pop af
+			@noloop:
+			ret nc
+
+			sub e		; error -= dy
+			exx
+			jr nc, @+noychange
+
+					; y ++
+					add hl, de
+
+			@noychange:
+
+					ld a, (hl)
+					and c
+highbyte3:			or 0xf0
+					ld (hl), a
+
+		ret
+
+;----------------------------------------------------------------------------------------------
+	@xposyneg:
+
+		; starts with negative y difference in b, positive x difference in a
+		ld c, a
+		ld a, b
+		neg
+		ld b, a
+				; now b has positive y difference, positive x is in c
+		cp c
+		jp nc, @+ydiffgreater
+
+		@xdiffgreater:		; a = positive x difference, b = positive y difference
+		ld e, b			; e = dy
+		ld d, c			; d = dx
+		ld b, c			; b = dx and pixel count
+
+		ld a, c
+		srl a			; a = error = dx >> 1
+
+		push hl
+		exx
+		ld de, -128
+		jp @-xdil
+
+		@ydiffgreater:
+
+		ld e, b			; e = dy
+		ld d, c			; d = dx
+		ld b, e			; b = dy and pixel count
+
+		ld a, e
+		srl a			; a = error = dy >> 1
+
+		push hl
+		exx
+		ld de, -128
+		jp @-ydil
+
+
+;
+;	ClearLine - draws a black line from (L, H) to (E, D), possibly doing some extra black pixels by the side
+;	clobbers: everything except ix & iy
+;
+ClearLine:
+	; one of four jumps first, to combos of x pos/neg and y pos/neg
+
+		ld a, d
+		sub h
+		ld b, a
+		jr nc, @+ypos
+
+		; y is negative
+			ld a, e
+			sub l
+			jp nc, @+xposyneg
+
+			ex de, hl	; now x and y are positive
+			ld a, d
+			sub h
+			ld b, a
+			ld a, e
+			sub l
+
+			jr @+xposypos
+
+		@ypos:
+
+		; y is positive
+			ld a, e
+			sub l
+			jr nc, @+xposypos
+
+			ex de, hl	; now x is positive, but y is negative
+			ld a, d
+			sub h
+			ld b, a
+			ld a, e
+			sub l
+
+			jp @+xposyneg
+
+
+	; now the routines themselves...
+
+;----------------------------------------------------------------------------------------------
+	@xposypos:
+
+		; starts with positive y difference in b, positive x difference in a
+		cp b
+		jp nc, @+xdiffgreater
+
+		@ydiffgreater:
+		ld e, b			; e = dy
+		ld d, a			; d = dx
+		ld b, e			; b = dy and pixel count
+
+		ld a, e
+		srl a			; a = error = dy >> 1
+
+		; get hl into hl', turn into address load 128 to de'
+		push hl
+		exx
+			pop hl
+			ld de, 128
+		@ydil:
+			ld b, 0		; b is the only spare register, this value is picked randomly
+
+			; convert HL into an address, and jump to plot left if necessary
+			scf
+			rr h
+			rr l
+		exx
+
+		jr nc, @+pelloopleft
+
+			@pelloopright:
+
+				sub d
+				jr nc, @+nojumpl
+
+					add e
+					exx
+						inc l
+					jr @+nojumprpexx
+
+				@nojumpl:
+					exx
+						add hl, de
+						ld (hl), b
+					exx
+
+			djnz @-pelloopright
+		ret
+
+			@pelloopleft:
+
+				sub d
+				jr nc, @+nojumpr
+
+					add e
+					jr @-nojumpl
+
+				@nojumpr:
+					exx
+				@nojumprpexx:
+						add hl, de
+						ld (hl), b
+					exx
+
+			djnz @-pelloopleft
+		ret
+
+		@xdiffgreater:		; a = positive x difference, b = positive y difference
+
+			; if dx = dy = 0 then the code will get here
+			and a
+			ret z
+
+		ld e, b			; e = dy
+		ld d, a			; d = dx
+		ld b, a			; b = dx and pixel count
+
+		srl a			; a = error = dx >> 1
+
+		push hl
+		exx
+			ld de, 128
+		@xdil:
+			pop hl
+			ld b, 0
+
+			; convert HL into an address, and do an odd plot if necessary
+			scf
+			rr h
+			rr l
+		exx
+		jr nc, @+nooddplot
+
+			sub e		; error -= dy
+			jr nc, @+noychange
+
+				add d	; error += dx
+					; y ++
+				exx
+					add hl, de
+				exx
+
+			@noychange:
+
+				dec b
+				exx
+					ld (hl), b
+					inc l
+				exx
+
+		@nooddplot:
+
+			srl b
+				jr z, @+noloop
+				push af
+
+			@dpelloop:
+
+				sub e
+				jr nc, @+noychange
+
+					; y ++
+					exx
+						add hl, de
+					exx
+
+					add d	; error += dx
+
+				@noychange:
+
+					sub e
+				jr nc, @+noychange
+
+					add d
+					ld c, a
+
+					exx
+						ld (hl), b
+						add hl, de
+						ld (hl), b
+					exx
+
+					ld a, c
+					jr @+checkb
+
+				@noychange:
+					exx
+						ld (hl), b
+					exx
+
+				@checkb:
+				exx
+					inc l
+				exx
+				djnz @-dpelloop
+
+			pop af
+			@noloop:
+			ret nc
+
+			sub e		; error -= dy
+			exx
+			jr nc, @+noychange
+
+					; y ++
+					add hl, de
+
+			@noychange:
+
+					ld (hl), b
+
+		ret
+
+;----------------------------------------------------------------------------------------------
+	@xposyneg:
+
+		; starts with negative y difference in b, positive x difference in a
+		ld c, a
+		ld a, b
+		neg
+		ld b, a
+				; now b has positive y difference, positive x is in c
+		cp c
+		jp nc, @+ydiffgreater
+
+		@xdiffgreater:		; a = positive x difference, b = positive y difference
+		ld e, b			; e = dy
+		ld d, c			; d = dx
+		ld b, c			; b = dx and pixel count
+
+		ld a, c
+		srl a			; a = error = dx >> 1
+
+		push hl
+		exx
+		ld de, -128
+		jp @-xdil
+
+		@ydiffgreater:
+
+		ld e, b			; e = dy
+		ld d, c			; d = dx
+		ld b, e			; b = dy and pixel count
+
+		ld a, e
+		srl a			; a = error = dy >> 1
+
+		push hl
+		exx
+		pop hl
+		ld de, -128
+		jp @-ydil

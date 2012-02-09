@@ -1,0 +1,64 @@
+;
+;	Use draw to actually display graphics
+;
+
+Draw:
+;	call ClearDisplay
+;			ld a, 4
+;			ld b, 0xcc
+;			ld hl, PolyVerticesX
+;			call DrawPoly
+;				ret
+			
+;			ld a, 4
+;			ld b, 0xfc
+;			ld hl, PolyVerticesX
+;			call DrawPoly
+;		ret
+
+		; make new player matrix
+			ld iy, PlayerInfoBlock
+			call SetCamera_Rot3
+
+;jr @+nostress
+		; draw House
+			ld iy, HouseBlock2
+			call DrawModel_Rot3
+			
+;		ret
+			
+		; draw House
+			ld iy, HouseBlock1
+			call DrawModel_Rot3
+
+		; draw House
+			ld iy, HouseBlock3
+			call DrawModel_Rot3
+
+		; draw House
+			ld iy, HouseBlock4
+			call DrawModel_Rot3
+
+		; draw House
+			ld iy, HouseBlock5
+			call DrawModel_Rot3
+
+@nostress:
+		; draw Cobra Mk 3 model
+			ld iy, CobraMk3Block
+			call DrawModel_Rot3
+
+;			ld iy, CobraMk3BlockNew
+;			call DrawModel_Rot3New
+
+
+	ret
+
+;DS ALIGN 256
+;PolyVerticesX:
+;	db 2, 28, 245, 5
+;	
+;DS ALIGN 256
+;PolyVerticesY:
+;	db 70, 20, 30, 190
+	

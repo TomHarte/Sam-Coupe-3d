@@ -1,0 +1,1384 @@
+	@sin_x: dw 0
+	@cos_x: dw 0
+	@sin_y: dw 0
+	@cos_y: dw 0
+	@sin_z: dw 0
+	@cos_z: dw 0
+	@sinx_siny: dw 0
+	@cosx_siny: dw 0
+
+GetRot3Matrix:
+	; store XAng, YAng and ZAng for later
+
+	; get sin_x
+		ld h, SINEL >> 8
+		ld l, (iy+INFO_ROTX+1)
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (@-sin_x), de
+
+	; get cos_x
+		ld a, 64
+		sub l
+		ld l, a
+		dec h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (@-cos_x), de
+
+	; get sin_y
+		ld h, SINEL >> 8
+		ld l, (iy+INFO_ROTY+1)
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (@-sin_y), de
+
+	; get cos_y
+		ld a, 64
+		sub l
+		ld l, a
+		dec h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (@-cos_y), de
+
+	; get sin_z
+		ld h, SINEL >> 8
+		ld l, (iy+INFO_ROTZ+1)
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (@-sin_z), de
+
+	; get cos_z
+		ld a, 64
+		sub l
+		ld l, a
+		dec h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ld (@-cos_z), de
+
+	; calculate sinx_siny
+		ld de, (@-sin_x)
+		ld bc, (@-sin_y)
+		call FIXMUL1010
+		ld (@-sinx_siny), hl
+
+	; calculate cosx_siny
+		ld de, (@-cos_x)
+		ld bc, (@-sin_y)
+		call FIXMUL1010
+		ld (@-cosx_siny), hl
+
+					; cosx_siny and sinx_siny need to be shifted right 4 spots to make 8.8
+
+	; compute ViewRot_[0,0]
+		ld de, (@-cos_y)
+		ld bc, (@-cos_z)
+		call FIXMUL1010
+
+			sra h
+			rr l
+			sra h
+			rr l
+
+		ld (ix), l
+		ld (ix+1), h
+
+	; compute ViewRot_[0,1]
+		ld de, (@-cos_y)
+		ld bc, (@-sin_z)
+		call FIXMUL1010
+
+			sra h
+			rr l
+			sra h
+			rr l
+
+		ld (ix+6), l
+		ld (ix+7), h
+
+	; compute ViewRot_[0,2]
+		ld hl, 0
+		ld bc, (@-sin_y)
+		and a			; clear carry
+		sbc hl, bc
+
+		ld (ix+12), l
+		ld (ix+13), h
+
+	; compute ViewRot_[1,0]
+		ld de, (@-cos_x)
+		ld bc, (@-sin_z)
+		call FIXMUL1010
+		push hl
+
+		ld de, (@-sinx_siny)
+		ld bc, (@-cos_z)
+		call FIXMUL
+			sra h
+			rr l
+			sra h
+			rr l
+
+		pop bc
+		and a			; clear carry
+		sbc hl, bc
+
+			sra h
+			rr l
+			sra h
+			rr l
+
+		ld (ix+2), l
+		ld (ix+3), h
+
+	; compute ViewRot_[1,1]
+		ld de, (@-cos_x)
+		ld bc, (@-cos_z)
+		call FIXMUL1010
+		push hl
+
+		ld de, (@-sinx_siny)
+		ld bc, (@-sin_z)
+		call FIXMUL
+			sra h
+			rr l
+			sra h
+			rr l
+		
+		pop bc
+		add hl, bc
+
+			sra h
+			rr l
+			sra h
+			rr l
+
+		ld (ix+8), l
+		ld (ix+9), h
+
+	; compute ViewRot_[1,2]
+		ld de, (@-sin_x)
+		ld bc, (@-cos_y)
+		call FIXMUL1010
+
+			sra h
+			rr l
+			sra h
+			rr l
+			
+		ld (ix+14), l
+		ld (ix+15), h
+
+	; compute ViewRot_[2,0]
+		ld de, (@-sin_x)
+		ld bc, (@-sin_z)
+		call FIXMUL1010
+		push hl
+
+		ld de, (@-cosx_siny)
+		ld bc, (@-cos_z)
+		call FIXMUL
+		sra h
+		rr l
+		sra h
+		rr l
+		
+		pop bc
+		add hl, bc
+
+			sra h
+			rr l
+			sra h
+			rr l
+		ld (ix+4), l
+		ld (ix+5), h
+
+	; compute ViewRot_[2,1]
+		ld de, (@-sin_x)
+		ld bc, (@-cos_z)
+		call FIXMUL1010
+		push hl
+
+		ld de, (@-cosx_siny)
+		ld bc, (@-sin_z)
+		call FIXMUL
+			sra h
+			rr l
+			sra h
+			rr l		
+		
+		pop bc
+		and a			; clear carry
+		sbc hl, bc
+
+			sra h
+			rr l
+			sra h
+			rr l
+		ld (ix+10), l
+		ld (ix+11), h
+
+	; compute ViewRot_[2,2]
+		ld de, (@-cos_x)
+		ld bc, (@-cos_y)
+		call FIXMUL1010
+
+			sra h
+			rr l
+			sra h
+			rr l
+		ld (ix+16), l
+		ld (ix+17), h
+
+	; all done - position stuff is fed separately, if at all
+
+	ret
+
+	@ObjectIdentity: db 0
+CombineRot3Matrix:
+	ld a, (iy+INFO_ROTX+1)
+	or (iy+INFO_ROTY+1)
+	or (iy+INFO_ROTZ+1)
+	ld (@-ObjectIdentity), a
+	jr z, @+MCopy
+
+	call GetRot3Matrix			;16,000
+	call CombineMatrices		;15,176
+	ret
+
+@MCopy:
+	xor a
+
+	ld de, (CameraMatrix)
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix), hl
+
+	ld de, (CameraMatrix+2)
+	ld bc, 426
+	call FIXMUL
+	xor a
+	ex de, hl
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+2), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+2), hl
+
+	ld de, (CameraMatrix+4)
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+4), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+4), hl
+
+	ld de, (CameraMatrix+6)
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+6), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+6), hl
+
+	ld de, (CameraMatrix+8)
+	ld bc, 426
+	call FIXMUL
+	xor a
+	ex de, hl
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+8), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+8), hl
+
+	ld de, (CameraMatrix+10)
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+10), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+10), hl
+
+	ld de, (CameraMatrix+12)
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+12), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+12), hl
+
+	ld de, (CameraMatrix+14)
+	ld bc, 426
+	call FIXMUL
+	xor a
+	ex de, hl
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+14), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+14), hl
+
+	ld de, (CameraMatrix+16)
+	sra d
+	rr e
+	sra d
+	rr e
+	ld (CompositeMatrix+16), de
+	ld h, a
+	ld l, a
+	and a
+	sbc hl, de
+	ld (NegativeCompositeMatrix+16), hl
+	
+	ret
+
+
+StorePosition:
+		ld c, (iy+INFO_POSX)
+		ld b, (iy+INFO_POSX+1)
+		ld (ObjectMatrix+18), bc
+		ld c, (iy+INFO_POSY)
+		ld b, (iy+INFO_POSY+1)
+		ld (ObjectMatrix+20), bc
+		ld c, (iy+INFO_POSZ)
+		ld b, (iy+INFO_POSZ+1)
+		ld (ObjectMatrix+22), bc
+		ret
+
+StoreInversePosition:
+		ld c, (iy+INFO_POSX)
+		ld b, (iy+INFO_POSX+1)
+		ld (CameraMatrix+18), bc
+		ld c, (iy+INFO_POSY)
+		ld b, (iy+INFO_POSY+1)
+		ld (CameraMatrix+20), bc
+		ld c, (iy+INFO_POSZ)
+		ld b, (iy+INFO_POSZ+1)
+		ld (CameraMatrix+22), bc
+		ret
+
+SetCamera_Rot3:
+	ld ix, CameraMatrix
+
+	ld a, (CameraAngles)
+	cp (iy+INFO_ROTX+1)
+	jp nz, @+newmatrix
+
+	ld a, (CameraAngles+1)
+	cp (iy+INFO_ROTY+1)
+	jp nz, @+newmatrix
+
+	ld a, (CameraAngles+2)
+	cp (iy+INFO_ROTZ+1)
+	jp z, @+storepos
+
+@newmatrix:
+	ld a, (iy+INFO_ROTX+1)
+	ld (CameraAngles), a
+	ld a, (iy+INFO_ROTY+1)
+	ld (CameraAngles+1), a
+	ld a, (iy+INFO_ROTZ+2)
+	ld (CameraAngles+2), a
+	call GetRot3Matrix
+
+@storepos:
+	call StoreInversePosition
+	ret
+	
+;
+;
+;
+GetModelOffset:
+		; get vector from camera to object in world space
+		ld de, (CameraMatrix+18)
+		ld hl, (ObjectMatrix+18)
+		and a
+		sbc hl, de
+		ld (PosOffs), hl
+		ld b, h
+
+		ld de, (CameraMatrix+20)
+		ld hl, (ObjectMatrix+20)
+		and a
+		sbc hl, de
+		ld (PosOffs+2), hl
+		ld c, h
+
+		ld de, (CameraMatrix+22)
+		ld hl, (ObjectMatrix+22)
+		and a
+		sbc hl, de
+		ld (PosOffs+4), hl
+
+		; which level of precision to use?
+
+		; (0, 3)
+			ld de, (CameraMatrix)
+			ld bc, (PosOffs)
+			call FIXMUL1612_LONG
+
+			ld de, (CameraMatrix+6)
+			ld bc, (PosOffs+2)
+			call FIXMUL1612_LONGADD
+
+			ld de, (CameraMatrix+12)
+			ld bc, (PosOffs+4)
+			call FIXMUL1612_LONGADD
+
+				sra a
+				rr h
+				rr l
+				sra a
+				rr h
+				rr l
+			ld (CompositeMatrix+18), hl
+
+		; (1, 3)
+			ld de, (CameraMatrix+2)
+			ld bc, (PosOffs)
+			call FIXMUL1612_LONG
+
+			ld de, (CameraMatrix+8)
+			ld bc, (PosOffs+2)
+			call FIXMUL1612_LONGADD
+
+			ld de, (CameraMatrix+14)
+			ld bc, (PosOffs+4)
+			call FIXMUL1612_LONGADD
+
+				; y ratio correction
+			ld b, h
+			ld c, l
+			ld de, 426
+			call FIXMUL1612_LONG
+
+				sra a
+				rr h
+				rr l
+				sra a
+				rr h
+				rr l
+			ld (CompositeMatrix+20), hl
+
+		; (2, 3)
+			ld de, (CameraMatrix+4)
+			ld bc, (PosOffs)
+			call FIXMUL1612_LONG
+
+			ld de, (CameraMatrix+10)
+			ld bc, (PosOffs+2)
+			call FIXMUL1612_LONGADD
+
+			ld de, (CameraMatrix+16)
+			ld bc, (PosOffs+4)
+			call FIXMUL1612_LONGADD
+
+				sra a
+				rr h
+				rr l
+				sra a
+				rr h
+				rr l
+			ld (CompositeMatrix+22), hl
+
+		ret
+
+;
+;	Post-multiply the Player matrix by the Object matrices, store to Camera matrix
+;
+;	NB: the object matrix needs to be inverted...
+;
+	PosOffs: ds 6
+	@MULCALL: EQU FIXMUL1010
+	@MULCALLADD: EQU FIXMUL1010ADD
+CombineMatrices:
+
+		; (0, 0)
+			ld bc, (CameraMatrix)
+			ld de, (ObjectMatrix)
+			call @-MULCALL			
+
+			ld bc, (CameraMatrix+6)
+			ld de, (ObjectMatrix+6)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+12)
+			ld de, (ObjectMatrix+12)
+			call @-MULCALLADD
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix), hl
+
+		; (1, 0)
+			ld bc, (CameraMatrix+2)
+			ld de, (ObjectMatrix)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+8)
+			ld de, (ObjectMatrix+6)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+14)
+			ld de, (ObjectMatrix+12)
+			call @-MULCALLADD
+
+				; y ratio correction — multiply hl by 426/256
+			ex de, hl
+			ld bc, 426
+			call FIXMUL
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+2), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+2), hl
+
+		; (2, 0)
+			ld bc, (CameraMatrix+4)
+			ld de, (ObjectMatrix)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+10)
+			ld de, (ObjectMatrix+6)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+16)
+			ld de, (ObjectMatrix+12)
+			call @-MULCALLADD
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+4), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+4), hl
+
+		; (0, 1)
+			ld bc, (CameraMatrix)
+			ld de, (ObjectMatrix+2)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+6)
+			ld de, (ObjectMatrix+8)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+12)
+			ld de, (ObjectMatrix+14)
+			call @-MULCALLADD
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+6), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+6), hl
+
+		; (1, 1)
+			ld bc, (CameraMatrix+2)
+			ld de, (ObjectMatrix+2)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+8)
+			ld de, (ObjectMatrix+8)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+14)
+			ld de, (ObjectMatrix+14)
+			call @-MULCALLADD
+
+				; y ratio correction — multiply hl by 426/256
+			ex de, hl
+			ld bc, 426
+			call FIXMUL
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+8), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+8), hl
+
+		; (2, 1)
+			ld bc, (CameraMatrix+4)
+			ld de, (ObjectMatrix+2)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+10)
+			ld de, (ObjectMatrix+8)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+16)
+			ld de, (ObjectMatrix+14)
+			call @-MULCALLADD
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+10), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+10), hl
+
+		; (0, 2)
+			ld bc, (CameraMatrix)
+			ld de, (ObjectMatrix+4)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+6)
+			ld de, (ObjectMatrix+10)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+12)
+			ld de, (ObjectMatrix+16)
+			call @-MULCALLADD
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+12), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+12), hl
+
+		; (1, 2)
+			ld bc, (CameraMatrix+2)
+			ld de, (ObjectMatrix+4)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+8)
+			ld de, (ObjectMatrix+10)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+14)
+			ld de, (ObjectMatrix+16)
+			call @-MULCALLADD
+
+				; y ratio correction — multiply hl by 426/256
+			ex de, hl
+			ld bc, 426
+			call FIXMUL
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+14), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+14), hl
+
+		; (2, 2)
+			ld bc, (CameraMatrix+4)
+			ld de, (ObjectMatrix+4)
+			call @-MULCALL
+
+			ld bc, (CameraMatrix+10)
+			ld de, (ObjectMatrix+10)
+			call @-MULCALLADD
+
+			ld bc, (CameraMatrix+16)
+			ld de, (ObjectMatrix+16)
+			call @-MULCALLADD
+
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l			
+				sra h
+				rr l
+			ld (CompositeMatrix+16), hl
+			ex de, hl
+			ld hl, 0
+			and a
+			sbc hl, de
+			ld (NegativeCompositeMatrix+16), hl
+
+
+	ret
+
+;
+; AIOM — Apply
+;
+@ApplyIdentityInverse:
+		ld hl, (CameraMatrix+18)
+		ld c, (iy+INFO_POSX)
+		ld b, (iy+INFO_POSX+1)
+		and a
+		sbc hl, bc
+		ld (RelPos), hl
+
+		ld hl, (CameraMatrix+20)
+		ld c, (iy+INFO_POSY)
+		ld b, (iy+INFO_POSY+1)
+		and a
+		sbc hl, bc
+		ld (RelPos+2), hl
+
+		ld hl, (CameraMatrix+22)
+		ld c, (iy+INFO_POSZ)
+		ld b, (iy+INFO_POSZ+1)
+		and a
+		sbc hl, bc
+		ld (RelPos+4), hl
+		
+	ret
+
+@XPos: dw 0
+@YPos: dw 0
+@ZPos: dw 0
+ApplyInverseObjectMatrix:
+
+	ld a, (@-ObjectIdentity)
+	or a
+	jp z, @-ApplyIdentityInverse
+
+	; work out relative position of player from object
+		ld hl, (CameraMatrix+18)
+		ld c, (iy+INFO_POSX)
+		ld b, (iy+INFO_POSX+1)
+		and a
+		sbc hl, bc
+		ld (@-XPos), hl
+
+		ld hl, (CameraMatrix+20)
+		ld c, (iy+INFO_POSY)
+		ld b, (iy+INFO_POSY+1)
+		and a
+		sbc hl, bc
+		ld (@-YPos), hl
+
+		ld hl, (CameraMatrix+22)
+		ld c, (iy+INFO_POSZ)
+		ld b, (iy+INFO_POSZ+1)
+		and a
+		sbc hl, bc
+		ld (@-ZPos), hl
+
+	; apply object matrix in wrong order, store to RelPos
+		ld de, (ObjectMatrix)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-XPos)
+		call FIXMUL1610
+
+		ld de, (ObjectMatrix+6)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-YPos)
+		call FIXMUL1610ADD
+
+		ld de, (ObjectMatrix+12)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-ZPos)
+		call FIXMUL1610ADD
+
+		ld (RelPos), hl
+
+		ld de, (ObjectMatrix+2)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-XPos)
+		call FIXMUL1610
+
+		ld de, (ObjectMatrix+8)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-YPos)
+		call FIXMUL1610ADD
+
+		ld de, (ObjectMatrix+14)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-ZPos)
+		call FIXMUL1610ADD
+
+		ld (RelPos+2), hl
+
+		ld de, (ObjectMatrix+4)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-XPos)
+		call FIXMUL1610
+
+		ld de, (ObjectMatrix+10)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-YPos)
+		call FIXMUL1610ADD
+
+		ld de, (ObjectMatrix+16)
+			sra d
+			rr e
+			sra d
+			rr e
+		ld bc, (@-ZPos)
+		call FIXMUL1610ADD
+
+		ld (RelPos+4), hl
+
+	ret
+
+;
+;	code to apply the camera matrix, leaving results in RESX, RESY, RESZ
+;
+@PosX:	dw 0
+@PosY:	dw 0
+@PosZ:	dw 0
+ApplyCompositeMatrix:
+
+	; work out resX
+		ld c, (ix+TRANSFORM_POS+0)
+		ld b, (ix+TRANSFORM_POS+1)
+		ld (@-PosX), bc
+		ld hl, (CompositeMatrix)
+		ld de, (NegativeCompositeMatrix)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc
+		push hl				; mx*x on stack
+
+		ld c, (ix+TRANSFORM_POS+2)
+		ld b, (ix+TRANSFORM_POS+3)
+		ld (@-PosY), bc
+		ld hl, (CompositeMatrix+6)
+		ld de, (NegativeCompositeMatrix+6)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc
+		push hl				; my*y on stack
+
+		ld c, (ix+TRANSFORM_POS+4)
+		ld b, (ix+TRANSFORM_POS+5)
+		ld (@-PosZ), bc
+		ld hl, (CompositeMatrix+12)
+		ld de, (NegativeCompositeMatrix+12)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc			; mz*z in hl
+		pop bc
+		add hl, bc			; my*y + mz*z in hl
+
+		ld bc, (CompositeMatrix+18)
+		add hl, bc
+
+		pop bc
+		push hl
+		add hl, bc			; mx*x + my*y + mz*z in hl
+
+		ld (ix+TRANSFORM_XP_POS+0), l
+		ld (ix+TRANSFORM_XP_POS+1), h
+
+		pop hl
+		and a
+		sbc hl, bc
+
+		ld (ix+TRANSFORM_XM_POS+0), l
+		ld (ix+TRANSFORM_XM_POS+1), h
+
+	; work out resY
+		ld bc, (@-PosX)
+		ld hl, (CompositeMatrix+2)
+		ld de, (NegativeCompositeMatrix+2)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc
+		push hl				; mx*x on stack
+
+		ld bc, (@-PosY)
+		ld hl, (CompositeMatrix+8)
+		ld de, (NegativeCompositeMatrix+8)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc
+		push hl				; my*y on stack
+
+		ld bc, (@-PosZ)
+		ld hl, (CompositeMatrix+14)
+		ld de, (NegativeCompositeMatrix+14)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc			; mz*z in hl
+		pop bc
+		add hl, bc
+
+		ld bc, (CompositeMatrix+20)
+		add hl, bc
+
+		pop bc
+		push hl
+		push bc
+		add hl, bc
+
+		ld (ix+TRANSFORM_XP_POS+2), l
+		ld (ix+TRANSFORM_XP_POS+3), h
+
+			; and x-
+
+		pop bc
+		pop hl
+		and a
+		sbc hl, bc
+
+		ld (ix+TRANSFORM_XM_POS+2), l
+		ld (ix+TRANSFORM_XM_POS+3), h
+
+	; work out resZ
+		ld bc, (@-PosX)
+		ld hl, (CompositeMatrix+4)
+		ld de, (NegativeCompositeMatrix+4)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc
+		push hl				; mx*x on stack
+
+		ld bc, (@-PosY)
+		ld hl, (CompositeMatrix+10)
+		ld de, (NegativeCompositeMatrix+10)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc
+		push hl				; my*y on stack
+
+		ld bc, (@-PosZ)
+		ld hl, (CompositeMatrix+16)
+		ld de, (NegativeCompositeMatrix+16)
+
+		add hl, bc			; hl = x + mx
+		ex de, hl
+		add hl, bc			; hl = x - mx, de = x + mx
+
+		sla h
+		ld c, (hl)
+		inc h
+		ld b, (hl)			; bc = (x - mx)^2
+		ex de, hl
+
+		sla h
+		ld e, (hl)
+		inc h
+		ld d, (hl)
+		ex de, hl			; hl = (x + mx)^2
+
+		and a
+		sbc hl, bc			; mz*z in hl
+		pop bc
+		add hl, bc
+
+		ld bc, (CompositeMatrix+22)
+		add hl, bc
+
+		pop bc
+		push hl
+		add hl, bc
+
+		ld (ix+TRANSFORM_XP_POS+4), l
+		ld (ix+TRANSFORM_XP_POS+5), h
+
+		pop hl
+		and a
+		sbc hl, bc
+
+		ld (ix+TRANSFORM_XM_POS+4), l
+		ld (ix+TRANSFORM_XM_POS+5), h
+
+	; work out flags and offsets for XM
+
+		; assume flags = 0 at first, keep flags in c
+		ld c, 0
+
+		; check for z < ZCUTOFF
+			push hl				; copy z to stack
+			ld de, ZCUTOFF		; load ZCUTOFF
+			and a
+			sbc hl, de			; use sbc to compare 
+			pop hl				; but restore original value of z
+			jp p, @+nozflag
+
+				set 0, c
+
+			@nozflag:
+
+		; check for x > z (0 > z - x)
+			ld e, (ix+TRANSFORM_XM_POS+0)		; load x
+			ld d, (ix+TRANSFORM_XM_POS+1)
+			push hl							; backup z
+			and a
+			sbc hl, de
+			jp p, @+noxpflag
+
+				set 1, c
+				jr @+noxmflag
+
+			@noxpflag:
+
+		; check for x < -z (x + z < 0)
+			pop hl							; restore and backup z, x still in de
+			push hl
+			and a
+			adc hl, de
+			jp p, @+noxmflag
+
+				set 2, c
+
+			@noxmflag:
+
+		; check for y > z (0 > z - y)
+			ld e, (ix+TRANSFORM_XM_POS+2)		; load y
+			ld d, (ix+TRANSFORM_XM_POS+3)
+			pop hl
+			push hl							; restore and backup z
+			and a
+			sbc hl, de
+			jp p, @+noypflag
+
+				set 3, c
+				pop hl
+				jr @+noymflag
+
+			@noypflag:
+
+		; check for y < -z (y + z < 0)
+			pop hl
+			and a
+			adc hl, de
+			jp p, @+noymflag
+
+				set 4, c
+
+			@noymflag:
+
+		; store flags
+		ld (ix+TRANSFORM_XM_FLAGS), c
+
+	; work out flags and offsets for XP
+
+		; assume flags = 0 at first, keep flags in c
+		ld c, 0
+		ld l, (ix+TRANSFORM_XP_POS+4)		; load z
+		ld h, (ix+TRANSFORM_XP_POS+5)
+
+		; check for z < ZCUTOFF
+			push hl				; copy z to stack
+			ld de, ZCUTOFF		; load ZCUTOFF
+			and a
+			sbc hl, de			; use sbc to compare 
+			pop hl				; but restore original value of z
+			jp p, @+nozflag
+
+				set 0, c
+
+			@nozflag:
+
+		; check for x > z (0 > z - x)
+			ld e, (ix+TRANSFORM_XP_POS+0)		; load x
+			ld d, (ix+TRANSFORM_XP_POS+1)
+			push hl							; backup z
+			and a
+			sbc hl, de
+			jp p, @+noxpflag
+
+				set 1, c
+				jr @+noxmflag
+
+			@noxpflag:
+
+		; check for x < -z (x + z < 0)
+			pop hl							; restore and backup z, x still in de
+			push hl
+			and a
+			adc hl, de
+			jp p, @+noxmflag
+
+				set 2, c
+
+			@noxmflag:
+
+		; check for y > z (0 > z - y)
+			ld e, (ix+TRANSFORM_XP_POS+2)		; load y
+			ld d, (ix+TRANSFORM_XP_POS+3)
+			pop hl
+			push hl							; restore and backup z
+			and a
+			sbc hl, de
+			jp p, @+noypflag
+
+				set 3, c
+				pop hl
+				jr @+noymflag
+
+			@noypflag:
+
+		; check for y < -z (y + z < 0)
+			pop hl
+			and a
+			adc hl, de
+			jp p, @+noymflag
+
+				set 4, c
+
+			@noymflag:
+
+		; store flags
+
+		ld (ix+TRANSFORM_XP_FLAGS), c
+
+	ret

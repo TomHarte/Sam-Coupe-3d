@@ -1,0 +1,1715 @@
+	INC "hardware.equ"
+
+	FACESIZE: EQU 10
+	EDGESIZE: EQU 13
+	EDGESIZE_N: EQU 9
+
+; structure stuff
+	TRANSFORM_POS:			EQU 0
+	TRANSFORM_FRAMECOUNTT:	EQU 6
+	TRANSFORM_FRAMECOUNTS:	EQU 8
+	TRANSFORM_XP_POS:		EQU 8
+	TRANSFORM_XP_FLAGS:		EQU 14
+	TRANSFORM_XM_POS:		EQU 19
+	TRANSFORM_XM_FLAGS:		EQU 25
+
+	PROJECT_WORLDPOS:		EQU 0
+	PROJECT_FLAGS:			EQU	6
+	PROJECT_SCREENPOS:		EQU 7
+	PROJECT_FRAMECOUNT:		EQU 9
+
+	EDGE_FLAGSADDR1:		EQU 0
+	EDGE_FLAGSADDR2:		EQU 2
+	EDGE_TRANSFORMADDR1:	EQU 4
+	EDGE_PROJECTADDR1:		EQU 6
+	EDGE_TRANSFORMADDR2:	EQU 8
+	EDGE_PROJECTADDR2:		EQU 10
+	EDGE_COLOUR:			EQU 12
+
+	INFO_POSX:				EQU 0
+	INFO_POSY:				EQU 3
+	INFO_POSZ:				EQU 6
+	INFO_ROTX:				EQU 9
+	INFO_ROTY:				EQU 11
+	INFO_ROTZ:				EQU 13
+	INFO_OBJPTR:			EQU 15
+	
+	OBJ_NUMVERTS:			EQU 0
+	OBJ_NUMFACES:			EQU 1
+	OBJ_NUMEDGES:			EQU 2
+	OBJ_VERTPTR:			EQU 3
+	OBJ_FACEPTR:			EQU 5
+	OBJ_EDGEPTR:			EQU 7
+	OBJ_:					EQU 9
+	OBJ_BOUNDINGSPHERE:		EQU 10
+
+	PROJECT_SIZE:			EQU 11
+
+	FACE_NORMALX:			EQU 0
+	FACE_NORMALY:			EQU 2
+	FACE_NORMALZ:			EQU 4
+	FACE_DISTANCE:			EQU 6
+	FACE_FLAGS: 			EQU 8
+
+; some defines
+	ZCUTOFF: EQU 64
+
+	FIRSTRECIPROCALPAGE:	EQU 0		; 64 kb is handed over storing reciprocals
+	FIRSTVIDEOPAGE:			EQU 4		; 6 (96 kb) pages for triple buffering...
+	LASTVIDEOPAGE:			EQU 8		; ... means that the final pair of video pages begin on page 8
+	MULTIPLYPAGE:			EQU 10
+	PROGRAMPAGE:			EQU 12		; 32 kb allocated for program code (fix this!)
+	FIRSTUSERPAGE:			EQU 14		; leaving 64 kb unused on a 256 kb machine (fix this!)
+
+	ORG 0
+
+	DUMP PROGRAMPAGE,0		; which puts this code at the start of page 2
+
+	MULTABSIZE: EQU 4096
+	INC "squares.tab"
+
+DS ALIGN 256
+INC "trig.tab"
+
+InterruptTable:
+@ITAB: EQU FOR 257
+	db 0x7e
+	NEXT @ITAB
+
+	AUTOEXEC
+Start:
+
+	di							; disable interrupts
+
+	ld sp, 32768				; put stack at 32768, heading downwards (just above interrupt routine at 7E7E 
+
+; page self to lower bank
+	LD A, %00100000+PROGRAMPAGE
+	LD C, LMPR
+	out (c), a
+	jp @+nextbit				; jp to next line of code, because we probably aren't executing where we expect to be
+
+@nextbit:
+
+; setup interrupts
+
+	ld a, InterruptTable >> 8	; load pointer to interrupt table
+	ld i, a
+
+	im 2						; set interrupt mode
+
+;	ld hl, IStart				; copy interupt routine to the correct position
+;	ld de, 0x7e7e
+;	ld bc, IEnd - IStart
+;	ldir
+
+; work out projection table, disable the screen for extra speed here
+	ld a, %10000000
+	ld bc, BORDER
+	out (c), a
+
+	ld de, 32767
+@ProjTabLoop:
+	ld bc, 63*256
+	push de
+	call FIXDIV	; get bc / de
+	ex de, hl
+
+	;
+	;
+	xor a
+	sla h
+	sla h		; top bit = 0, get next bit in carry
+	rl a
+	sla a		; get bit into bit 2 of a
+	add FIRSTRECIPROCALPAGE+%00100000
+	srl h
+	set 7, h
+	ld c, HMPR
+	out (c), a
+	ld (hl), e
+	inc h
+	ld (hl), d
+
+	pop de
+	dec de
+	ld a, d
+	or e
+	jr nz, @-ProjTabLoop
+
+	ld a, %00100000
+	ld bc, BORDER
+	out (c), a
+
+; set screen to be in mode 4, bank 'FIRSTVIDEOPAGE'
+	LD A, %01100000+FIRSTVIDEOPAGE
+	ld (vidpage), A
+	LD C, VMPR
+	OUT (C), A
+
+; copy multiplication table to top of USERPAGE
+	LD A, %00100000+FIRSTUSERPAGE
+	LD C, HMPR
+	OUT (C), A
+	call CopyMultiplicationTable
+
+; call init function while user page is paged
+	call Init
+
+; set upper bank of RAM to be bank 8
+	LD A, %00100000+FIRSTVIDEOPAGE+4
+	ld (rampage), a
+	LD C, HMPR
+	OUT (C), A
+
+	call ClearDisplay
+	call CopyMultiplicationTable
+	ld hl, LineTab
+	ld (LineTabPtr), hl
+	ld a, 0xff
+	ld (LineTab), a
+
+	ld hl, PointTab
+	ld (PointTabPtr), hl
+	ld a, 0xff
+	ld (PointTab), a
+
+; set upper bank of RAM to be bank 6
+	LD A, %00100000+FIRSTVIDEOPAGE+2
+	ld (rampage), a
+	LD C, HMPR
+	OUT (C), A
+
+	call ClearDisplay
+	call CopyMultiplicationTable
+	ld hl, LineTab
+	ld (LineTabPtr), hl
+	ld a, 0xff
+	ld (LineTab), a
+
+	ld hl, PointTab
+	ld (PointTabPtr), hl
+	ld a, 0xff
+	ld (PointTab), a
+
+; set upper bank of RAM to be bank 4
+	LD A, %00100000+FIRSTVIDEOPAGE
+	ld (rampage), A
+	LD C, HMPR
+	OUT (C), A
+
+	call ClearDisplay
+	call CopyMultiplicationTable
+	ld hl, LineTab
+	ld (LineTabPtr), hl
+	ld a, 0xff
+	ld (LineTab), a
+
+	ld hl, PointTab
+	ld (PointTabPtr), hl
+	ld a, 0xff
+	ld (PointTab), a
+
+; enable interrupts, starting timing
+	ei
+
+@drawloop:
+
+	; flip buffers
+	rflip:
+		LD A, (rampage)		; flip the buffer visible to the CPU
+		add 2
+		cp %00100000+LASTVIDEOPAGE+2
+		jp nz, @+setpage
+		ld a, %00100000+FIRSTVIDEOPAGE
+		@setpage:
+		ld (rampage), A
+		LD C, HMPR
+		OUT (C), A
+
+	; clear display
+		call ClearLines		; draws black over all lines in frame
+		call ClearPoints	; draws black over all points in frame
+
+	; reset image pointer
+		ld hl, LineTab
+		ld (LineTabPtr), hl
+		ld hl, PointTab
+		ld (PointTabPtr), hl
+
+		ld a, 0xff
+		ld (LineTab), a
+		ld (PointTab), a
+
+	; page in user page		
+		LD A, %00100000+FIRSTUSERPAGE
+		LD C, HMPR
+		OUT (C), A
+
+	; call Draw routine
+	call Draw
+
+	; get num steps
+	ld hl, 0
+	di
+	ld de, (UpdateCounter)
+	ld (UpdateCounter), hl
+	ei
+	call Update
+
+	; vsync if this is all going too quickly
+		ld a, (buffers)
+		cp 1				; 2 (???)
+		jr nz, @+nohalt
+		halt
+		@nohalt:
+		ld a, (buffers)
+		inc a
+		ld (buffers), a
+
+	jp @-drawloop
+
+;
+;	code to project the point at (ix)
+;
+;	clobbers hl, de and a
+;	returns xs and ys as unsigned 8.8 numbers - be careful!
+;
+Project:
+	ld e, (ix+PROJECT_WORLDPOS+4)	; load de with z
+	ld d, (ix+PROJECT_WORLDPOS+5)
+
+	xor a
+	sla d
+	sla d
+	rl a
+	rl a
+	srl d
+	set 7, d
+	add FIRSTRECIPROCALPAGE+%00100000
+	ld c, HMPR
+	out (c), a
+	ex de, hl
+	ld e, (hl)
+	inc h
+	ld d, (hl)
+
+	ld a, (rampage)
+	ld c, HMPR
+	out (c), a
+
+	ld hl, 0
+	ld c, (ix+PROJECT_WORLDPOS+0)	; hl = 0, bc = x
+	ld b, (ix+PROJECT_WORLDPOS+1)
+	push bc
+
+	exx
+	ld hl, 0
+	ld c, (ix+PROJECT_WORLDPOS+2)	; hl' = 0, bc' = y
+	ld b, (ix+PROJECT_WORLDPOS+3)
+	push bc
+	exx
+
+	ld a, d
+
+	@MULLOOP1: EQU FOR 7
+	rra
+	jr nc, @+noadd
+
+		add hl, bc
+		exx
+		add hl, bc
+		exx
+	@noadd:
+		sla c
+		rl b
+		exx
+		sla c
+		rl b
+		exx
+	NEXT @MULLOOP1
+
+	rra
+	jr nc, @+noadd
+
+		add hl, bc
+		exx
+		add hl, bc
+		exx
+	@noadd:
+
+@ddone:
+	exx
+	pop bc
+	ld a, b
+	add a, a
+	sbc a, a			; a = sign extension of bc
+
+	ld d, c				; rotate a:bc right 8, using d as a temporary store
+	ld c, b
+	ld b, a
+	exx
+	pop bc
+	ld a, b
+	add a, a
+	sbc a, a			; a = sign extension of bc
+
+	ld d, c				; rotate a:bc right 8, using d as a temporary store
+	ld c, b
+	ld b, a
+
+	ld a, e
+	@MULLOOP2: EQU FOR 7
+	rra
+	jr nc, @+noadd
+
+		add hl, bc
+		exx
+		add hl, bc
+		exx
+	@noadd:
+		sla d
+		rl c
+		rl b
+		exx
+		sla d
+		rl c
+		rl b
+		exx
+	NEXT @MULLOOP2
+
+	rra
+	jr nc, @+noadd
+
+		add hl, bc
+		exx
+		add hl, bc
+		exx
+	@noadd:
+
+	; hl = 63*x/z - make it 126* and store it
+	add hl, hl
+	ld a, 128
+	add a, h
+	ld (ix+PROJECT_SCREENPOS), a
+
+	exx
+	; hl = 63*y/z - make it 94.5* and store it
+	ld d, h
+	ld e, l
+	sra d
+	rr e
+	add hl, de
+	ld a, 96
+	add a, h
+	ld (ix+PROJECT_SCREENPOS+1), a
+
+	ret
+
+;
+;	camera matrix and location
+;
+CameraMatrix:
+	ds 12*2
+CameraAngles:
+	dw 0xffff
+	db 0xff
+
+;
+;	object matrix and location
+;
+ObjectMatrix:
+	ds 12*2
+
+;
+;	the two combined
+;
+CompositeMatrix:
+	ds 12*2
+
+NegativeCompositeMatrix:
+	ds 9*2
+
+CAMERA_XVEC_X: EQU CameraMatrix
+CAMERA_XVEC_Y: EQU CameraMatrix+6
+CAMERA_XVEC_Z: EQU CameraMatrix+12
+CAMERA_YVEC_X: EQU CameraMatrix+2
+CAMERA_YVEC_Y: EQU CameraMatrix+8
+CAMERA_YVEC_Z: EQU CameraMatrix+14
+CAMERA_ZVEC_X: EQU CameraMatrix+4
+CAMERA_ZVEC_Y: EQU CameraMatrix+10
+CAMERA_ZVEC_Z: EQU CameraMatrix+16
+
+RelPos: dw 0, 0, 0
+INC "matrix.z80s"
+
+CallHL: jp (hl)
+
+@Multiplier: dw 0
+@Divider: dw 0
+
+DrawModel_Rot3:
+	;
+	; page in the screen, for drawing
+	;
+		LD C, HMPR
+		IN A, (C)
+		push af
+		ld A, (rampage)
+		OUT (C), A
+
+		call DrawModel_Rot3_Inner
+
+		pop af
+		ld c, HMPR
+		out (c), a
+		ret
+
+DrawModel_Rot3_Inner:
+	;
+	; increment the combined frame/model count
+	;
+		ld hl, (FrameCount)
+		inc hl
+		ld (FrameCount), hl
+
+	;
+	;	get rotation matrix for this model
+	;
+	ld ix, ObjectMatrix
+	call StorePosition
+	call GetModelOffset
+
+	;
+	;	get bounding size into de
+	;
+	ld l, (iy+INFO_OBJPTR)
+	ld h, (iy+INFO_OBJPTR+1)
+	ld a, OBJ_BOUNDINGSPHERE
+	add l
+	jr nc, @+nohinc
+	inc h
+	@nohinc:
+	ld l, a
+	
+	ld e, (hl)
+	inc hl
+	ld d, (hl)
+
+	;
+	;	quit now if this object is clearly outside the view frustum
+	;
+	;	pos x, y, z are at +18, +20 and +22 in the total matrix
+	;
+
+		; return if z+1 < ZCUTOFF (i.e. z+1 has no chance of being visible)
+	ld hl, (CompositeMatrix+22)
+	add hl, de
+	ld bc, ZCUTOFF
+	and a
+	sbc hl, bc
+	ret m
+
+		; return if x-1 >= z
+		; x - 1 - z >= 0
+	ld hl, (CompositeMatrix+18)
+	ld bc, (CompositeMatrix+22)
+	and a
+	sbc hl, de
+	and a
+	sbc hl, bc
+	ret p
+
+		; return if x+1 <= -z
+		; x + 1 + z <= 0 (< 0 will do)
+	ld hl, (CompositeMatrix+18)
+	add hl, de
+	and a
+	adc hl, bc				; add without carry doesn't set the sign flag
+	ret m
+
+		; return if y-1 >= z
+	ld hl, (CompositeMatrix+20)
+	ld bc, (CompositeMatrix+22)
+	and a
+	sbc hl, de
+	and a
+	sbc hl, bc
+	ret p
+
+		; return if y+1 <= -z
+	ld hl, (CompositeMatrix+20)
+	add hl, de
+	and a
+	adc hl, bc				; add without carry doesn't set the sign flag
+	ret m
+
+	;
+	;	combine matrices
+	;
+	call CombineRot3Matrix	
+
+	;
+	;	work out player position relative to this object
+	;
+	call ApplyInverseObjectMatrix
+
+	;
+	;	push pointer to model to the stack
+	;
+	ld l, (iy+INFO_OBJPTR)
+	ld h, (iy+INFO_OBJPTR+1)
+	push hl
+	;
+	;	pop pointer to model into iy
+	;
+	pop iy
+
+	;
+	;	work out visible faces
+	;
+
+	ld l, (iy+OBJ_FACEPTR)
+	ld h, (iy+OBJ_FACEPTR+1)
+	push hl
+	pop ix
+	ld b, (iy+OBJ_NUMFACES)
+@faceloop:
+	push bc
+
+	; work out dot product of vector and face normal, store flag on face to set visibility
+		ld l, (ix+FACE_DISTANCE)
+		ld h, (ix+FACE_DISTANCE+1)
+
+		ld bc, (RelPos+2)
+		ld e, (ix+FACE_NORMALY)
+		ld d, (ix+FACE_NORMALY+1)
+		call FIXMUL1610ADD
+
+		ld bc, (RelPos+4)
+		ld e, (ix+FACE_NORMALZ)
+		ld d, (ix+FACE_NORMALZ+1)
+		call FIXMUL1610ADD
+
+		push hl
+
+		ld bc, (RelPos)
+		ld e, (ix+FACE_NORMALX)
+		ld d, (ix+FACE_NORMALX+1)
+		call FIXMUL1610ADD
+
+		ld (ix+FACE_FLAGS), h		; store high byte as flags
+
+		pop de
+		and a
+		sbc hl, de
+		ex de, hl
+		and a
+		sbc hl, de
+
+		ld (ix+FACE_FLAGS+1), h		; store high byte for plane mirrored across x
+
+		ld de, FACESIZE			; advance pointer
+		add ix, de
+
+	pop bc
+	djnz @-faceloop
+	
+
+	;
+	;	draw visible lines
+	;
+	ld l, (iy+OBJ_EDGEPTR)
+	ld h, (iy+OBJ_EDGEPTR+1)
+	ld b, (iy+OBJ_NUMEDGES)	; b = number of lines
+
+	push hl
+	pop iy
+					; iy = pointer to first line, looking at vertex pointers
+@lloop:
+	push bc
+	push iy
+	ld l, (iy+EDGE_FLAGSADDR1)		; get address of first face flags
+	ld h, (iy+EDGE_FLAGSADDR1+1)
+	ld e, (iy+EDGE_FLAGSADDR2)		; get address of second face flags
+	ld d, (iy+EDGE_FLAGSADDR2+1)
+	ld a, (de)
+	or (hl)
+	jp p, @+sloop		; skip this line if neither face has a negative normal
+
+	ld l, (iy+EDGE_TRANSFORMADDR1)		; get address of transform block of first point
+	ld h, (iy+EDGE_TRANSFORMADDR1+1)
+	push hl				; put address into ix
+	pop ix
+
+		; check if this point has been transformed and projected
+			ld bc, (FrameCount)
+			ld a, (ix+TRANSFORM_FRAMECOUNTT)
+			xor c
+			ld d, a
+			ld a, (ix+TRANSFORM_FRAMECOUNTT+1)
+			xor b
+			or d
+			jr z, @+projecttest
+
+				ld (ix+TRANSFORM_FRAMECOUNTT), c
+				ld (ix+TRANSFORM_FRAMECOUNTT+1), b
+				call ApplyCompositeMatrix	; apply the camera matrix to the projection block at ix
+
+			@projecttest:
+
+			ld l, (iy+EDGE_PROJECTADDR1)
+			ld h, (iy+EDGE_PROJECTADDR1+1)
+			push hl
+			pop ix
+
+			ld bc, (FrameCount)
+			ld a, (ix+PROJECT_FRAMECOUNT)
+			xor c
+			ld d, a
+			ld a, (ix+PROJECT_FRAMECOUNT+1)
+			xor b
+			or d
+			jr z, @+pcheckdone
+
+				ld (ix+PROJECT_FRAMECOUNT), c
+				ld (ix+PROJECT_FRAMECOUNT+1), b
+				ld a, (ix+PROJECT_FLAGS)
+				and a
+				call z, Project
+
+			@pcheckdone:
+
+	push ix
+
+	ld l, (iy+EDGE_TRANSFORMADDR2)		; get address of transform block of first point
+	ld h, (iy+EDGE_TRANSFORMADDR2+1)
+	push hl				; put address into ix
+	pop ix
+
+		; check if this point has been transformed and projected
+			ld bc, (FrameCount)
+			ld a, (ix+TRANSFORM_FRAMECOUNTT)
+			xor c
+			ld d, a
+			ld a, (ix+TRANSFORM_FRAMECOUNTT+1)
+			xor b
+			or d
+			jr z, @+projecttest
+
+				ld (ix+TRANSFORM_FRAMECOUNTT), c
+				ld (ix+TRANSFORM_FRAMECOUNTT+1), b
+				call ApplyCompositeMatrix	; apply the camera matrix to the projection block at ix
+
+			@projecttest:
+
+			ld l, (iy+EDGE_PROJECTADDR2)
+			ld h, (iy+EDGE_PROJECTADDR2+1)
+			push hl
+			pop ix
+
+			ld bc, (FrameCount)
+			ld a, (ix+PROJECT_FRAMECOUNT)
+			xor c
+			ld d, a
+			ld a, (ix+PROJECT_FRAMECOUNT+1)
+			xor b
+			or d
+			jr z, @+pcheckdone
+
+				ld (ix+PROJECT_FRAMECOUNT), c
+				ld (ix+PROJECT_FRAMECOUNT+1), b
+				ld a, (ix+PROJECT_FLAGS)
+				and a
+				call z, Project
+
+			@pcheckdone:
+
+	pop iy
+
+		; now ix = pointer to one vertex, iy = pointer to the other
+		ld b, (ix+PROJECT_FLAGS)
+		ld c, (iy+PROJECT_FLAGS)
+		ld a, b
+		and c
+		jp nz, @+sloop				; if both vertices have any of the same bits set, this line is off-screen
+
+		ld a, b
+		or c
+		jp z, @+noclipdraw			; if neither vertex has any bits set, both these points are on-screen
+
+		; clip line [...]
+
+			; consider a hasty ix switch
+				ld a, b
+				and a
+				jr z, @+noixswitch
+
+					ld e, (ix+PROJECT_WORLDPOS)
+					ld d, (ix+PROJECT_WORLDPOS+1)
+					ld (SpareVert1+PROJECT_WORLDPOS), de
+					ld e, (ix+PROJECT_WORLDPOS+2)
+					ld d, (ix+PROJECT_WORLDPOS+3)
+					ld (SpareVert1+PROJECT_WORLDPOS+2), de
+					ld e, (ix+PROJECT_WORLDPOS+4)
+					ld d, (ix+PROJECT_WORLDPOS+5)
+					ld (SpareVert1+PROJECT_WORLDPOS+4), de
+					ld (SpareVert1+PROJECT_FLAGS), a
+					ld ix, SpareVert1
+
+				@noixswitch:
+
+			; consider a hasty iy switch
+				ld a, c
+				and a
+				jr z, @+noiyswitch
+
+					ld e, (iy+PROJECT_WORLDPOS)
+					ld d, (iy+PROJECT_WORLDPOS+1)
+					ld (SpareVert2+PROJECT_WORLDPOS), de
+					ld e, (iy+PROJECT_WORLDPOS+2)
+					ld d, (iy+PROJECT_WORLDPOS+3)
+					ld (SpareVert2+PROJECT_WORLDPOS+2), de
+					ld e, (iy+PROJECT_WORLDPOS+4)
+					ld d, (iy+PROJECT_WORLDPOS+5)
+					ld (SpareVert2+PROJECT_WORLDPOS+4), de
+					ld (SpareVert2+PROJECT_FLAGS), a
+					ld iy, SpareVert2
+
+				@noiyswitch:
+
+			; load a with an OR of the two sets of flags
+
+			ld a, b
+			or c
+
+			bit 0, a				; test for break of z-plane
+			jp z, @+nozbreak
+				; get z offset from the near clip plane at (ix)
+				ld hl, -ZCUTOFF
+				ld c, (ix+PROJECT_WORLDPOS+4)
+				ld b, (ix+PROJECT_WORLDPOS+5)
+				add hl, bc
+				ex de, hl					; now de = ix.z - ZCUTOFF
+
+				; get z offset from the near clip plane at (iy)
+				ld hl, -ZCUTOFF
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; now hl = iy.z - ZCUTOFF
+				push hl
+
+				; get total offset travelled by the vector
+				and a
+				sbc hl, de					; hl = total length of vector
+
+				pop de
+				push hl
+				push de
+
+				ld l, (ix+PROJECT_WORLDPOS+2)
+				ld h, (ix+PROJECT_WORLDPOS+3)
+				ld e, (iy+PROJECT_WORLDPOS+2)
+				ld d, (iy+PROJECT_WORLDPOS+3)
+				and a
+				sbc hl, de					; hl = y vector from ix to iy
+
+				ld d, h
+				ld e, l
+				pop bc
+				ld (@-Multiplier), bc
+				call LONGMUL1010				; a:hl = y vector * distance to intersection
+				pop bc
+				ld (@-Divider), bc
+				ex de, hl
+
+				call DIV2010				; hl = new y offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+2)
+				ld b, (iy+PROJECT_WORLDPOS+3)
+				add hl, bc					; hl = y pos at intersection
+				push hl
+
+				ld l, (ix+PROJECT_WORLDPOS+0)
+				ld h, (ix+PROJECT_WORLDPOS+1)
+				ld e, (iy+PROJECT_WORLDPOS+0)
+				ld d, (iy+PROJECT_WORLDPOS+1)
+				and a
+				sbc hl, de					; hl = x vector from ix to iy
+
+				ld d, h
+				ld e, l
+				ld bc, (@-Multiplier)
+				call LONGMUL1010				; a:hl = x vector * distance to intersection
+				ld bc, (@-Divider)
+				ex de, hl
+				call DIV2010				; hl = new x offset from iy
+
+				ld c, (iy+PROJECT_WORLDPOS+0)
+				ld b, (iy+PROJECT_WORLDPOS+1)
+				add hl, bc					; hl = x pos at intersection
+
+				; figure out where this should be stored
+				ld a, (ix+PROJECT_FLAGS)
+				and 1
+				jr z, @+storeiy
+
+					ld (ix+PROJECT_WORLDPOS+0), l
+					ld (ix+PROJECT_WORLDPOS+1), h
+
+					pop hl
+					ld (ix+PROJECT_WORLDPOS+2), l
+					ld (ix+PROJECT_WORLDPOS+3), h
+
+					ld hl, ZCUTOFF
+					ld (ix+PROJECT_WORLDPOS+4), l
+					ld (ix+PROJECT_WORLDPOS+5), h
+
+					ld c, 0x80
+					call ReclassifyIXFromX
+					jr @+nextch
+
+				@storeiy:
+					ld (iy+PROJECT_WORLDPOS+0), l
+					ld (iy+PROJECT_WORLDPOS+1), h
+
+					pop hl
+					ld (iy+PROJECT_WORLDPOS+2), l
+					ld (iy+PROJECT_WORLDPOS+3), h
+
+					ld hl, ZCUTOFF
+					ld (iy+PROJECT_WORLDPOS+4), l
+					ld (iy+PROJECT_WORLDPOS+5), h
+
+					ld c, 0x80
+					call ReclassifyIYFromX
+
+			@nextch:
+				ld c, (ix+PROJECT_FLAGS)
+				ld b, (iy+PROJECT_FLAGS)
+				ld a, c
+				and b
+				and 0x7f
+				jp nz, @+sloop
+				ld a, c
+				or b
+
+			@nozbreak:
+			bit 1, a					; test for break of positive x plane
+			jp z, @+noxpbreak
+
+				; get x offset from +z at (ix)
+				ld l, (ix+PROJECT_WORLDPOS)
+				ld h, (ix+PROJECT_WORLDPOS+1)
+				ld c, (ix+PROJECT_WORLDPOS+4)
+				ld b, (ix+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, bc
+				ex de, hl					; now de = ix.x - ix.z
+
+				; get x offset from +z at (iy)
+				ld l, (iy+PROJECT_WORLDPOS)
+				ld h, (iy+PROJECT_WORLDPOS+1)
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, bc					; now hl = iy.x - iy.z
+				push hl
+
+				; get total offset travelled by the vector
+				and a
+				sbc hl, de					; hl = total length of vector
+
+				pop de
+				push hl
+				push de
+
+										; distance from (iy) to z with same sign as hl on stack
+
+				ld l, (ix+PROJECT_WORLDPOS+2)
+				ld h, (ix+PROJECT_WORLDPOS+3)
+				ld e, (iy+PROJECT_WORLDPOS+2)
+				ld d, (iy+PROJECT_WORLDPOS+3)
+				and a
+				sbc hl, de					; hl = y vector from ix to iy
+
+				ld d, h
+				ld e, l
+				pop bc
+				ld (@-Multiplier), bc
+				call LONGMUL1010				; a:hl = y vector * x distance to intersection
+				pop bc
+				ld (@-Divider), bc
+				ex de, hl
+				call DIV2010				; hl = new y offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+2)
+				ld b, (iy+PROJECT_WORLDPOS+3)
+				add hl, bc					; hl = y pos at intersection
+				push hl
+
+				ld l, (ix+PROJECT_WORLDPOS+4)
+				ld h, (ix+PROJECT_WORLDPOS+5)
+				ld e, (iy+PROJECT_WORLDPOS+4)
+				ld d, (iy+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, de					; hl = z vector from ix to iy
+
+				ld d, h
+				ld e, l
+				ld bc, (@-Multiplier)
+				call LONGMUL1010				; a:hl = z vector * x distance to intersection
+				ld bc, (@-Divider)
+				ex de, hl
+				call DIV2010				; hl = new z offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; hl = z (and x) pos at intersection
+
+				; figure out where this should be stored
+				ld a, (ix+PROJECT_FLAGS)
+				and 2
+				jr z, @+storeiy
+
+					ld (ix+PROJECT_WORLDPOS+4), l
+					ld (ix+PROJECT_WORLDPOS+5), h
+					ld (ix+PROJECT_WORLDPOS+0), l
+					ld (ix+PROJECT_WORLDPOS+1), h
+
+					pop hl
+					ld (ix+PROJECT_WORLDPOS+2), l
+					ld (ix+PROJECT_WORLDPOS+3), h
+					ld c, 0x80
+					call ReclassifyIXFromX2
+					jr @+nextch
+
+				@storeiy:
+					ld (iy+PROJECT_WORLDPOS+4), l
+					ld (iy+PROJECT_WORLDPOS+5), h
+					ld (iy+PROJECT_WORLDPOS+0), l
+					ld (iy+PROJECT_WORLDPOS+1), h
+
+					pop hl
+					ld (iy+PROJECT_WORLDPOS+2), l
+					ld (iy+PROJECT_WORLDPOS+3), h
+					ld c, 0x80
+					call ReclassifyIYFromX2
+
+			@nextch:
+				ld c, (ix+PROJECT_FLAGS)
+				ld b, (iy+PROJECT_FLAGS)
+				ld a, c
+				and b
+				and 0x7f
+				jp nz, @+sloop
+				ld a, c
+				or b
+
+			@noxpbreak:
+			bit 2, a				; test for break of negative x plane
+			jp z, @+noxmbreak
+
+				; get x offset from -z at (ix)
+				ld l, (ix+PROJECT_WORLDPOS)
+				ld h, (ix+PROJECT_WORLDPOS+1)
+				ld c, (ix+PROJECT_WORLDPOS+4)
+				ld b, (ix+PROJECT_WORLDPOS+5)
+				add hl, bc
+				ex de, hl					; now de = ix.x - (-ix.z)
+
+				; get x offset from -z at (iy)
+				ld l, (iy+PROJECT_WORLDPOS)
+				ld h, (iy+PROJECT_WORLDPOS+1)
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; now hl = iy.x - (-iy.z)
+				push hl
+
+				; get total offset travelled by the vector
+				and a
+				sbc hl, de					; hl = total length of vector
+
+				pop de
+				push hl
+				push de
+
+										; distance from (iy) to z with same sign as hl on stack
+
+				ld l, (ix+PROJECT_WORLDPOS+2)
+				ld h, (ix+PROJECT_WORLDPOS+3)
+				ld e, (iy+PROJECT_WORLDPOS+2)
+				ld d, (iy+PROJECT_WORLDPOS+3)
+				and a
+				sbc hl, de					; hl = y vector from ix to iy
+
+				ld d, h
+				ld e, l
+				pop bc
+				ld (@-Multiplier), bc
+				call LONGMUL1010				; a:hl = y vector * x distance to intersection
+				pop bc
+				ld (@-Divider), bc
+				ex de, hl
+				call DIV2010				; hl = new y offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+2)
+				ld b, (iy+PROJECT_WORLDPOS+3)
+				add hl, bc					; hl = y pos at intersection
+				push hl
+
+				ld l, (ix+PROJECT_WORLDPOS+4)
+				ld h, (ix+PROJECT_WORLDPOS+5)
+				ld e, (iy+PROJECT_WORLDPOS+4)
+				ld d, (iy+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, de					; hl = z vector from ix to iy
+
+				ld d, h
+				ld e, l
+				ld bc, (@-Multiplier)
+				call LONGMUL1010				; a:hl = z vector * x distance to intersection
+				ld bc, (@-Divider)
+				ex de, hl
+				call DIV2010				; hl = new z offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; hl = z (and x) pos at intersection
+
+				; figure out where this should be stored
+				ld a, (ix+PROJECT_FLAGS)
+				and 4
+				jr z, @+storeiy
+
+					ld (ix+PROJECT_WORLDPOS+4), l
+					ld (ix+PROJECT_WORLDPOS+5), h
+					ex de, hl
+					and a
+					ld hl, 0
+					sbc hl, de
+					ld (ix+PROJECT_WORLDPOS+0), l
+					ld (ix+PROJECT_WORLDPOS+1), h
+
+					pop hl
+					ld (ix+PROJECT_WORLDPOS+2), l
+					ld (ix+PROJECT_WORLDPOS+3), h
+					ld c, 0x80
+					call ReclassifyIXFromY
+					jr @+nextch
+
+				@storeiy:
+					ld (iy+PROJECT_WORLDPOS+4), l
+					ld (iy+PROJECT_WORLDPOS+5), h
+					ex de, hl
+					and a
+					ld hl, 0
+					sbc hl, de
+					ld (iy+PROJECT_WORLDPOS+0), l
+					ld (iy+PROJECT_WORLDPOS+1), h
+
+					pop hl
+					ld (iy+PROJECT_WORLDPOS+2), l
+					ld (iy+PROJECT_WORLDPOS+3), h
+					ld c, 0x80
+					call ReclassifyIYFromY
+
+			@nextch:
+				ld c, (ix+PROJECT_FLAGS)
+				ld b, (iy+PROJECT_FLAGS)
+				ld a, c
+				and b
+				and 0x7f
+				jp nz, @+sloop
+				ld a, c
+				or b
+
+			@noxmbreak:
+			bit 3, a				; test for break of positive y plane
+			jp z, @+noypbreak
+				push af
+
+				; get y offset from +z at (ix)
+				ld l, (ix+PROJECT_WORLDPOS+2)
+				ld h, (ix+PROJECT_WORLDPOS+3)
+				ld c, (ix+PROJECT_WORLDPOS+4)
+				ld b, (ix+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, bc
+				ex de, hl					; now de = ix.x - ix.z
+
+				; get y offset from +z at (iy)
+				ld l, (iy+PROJECT_WORLDPOS+2)
+				ld h, (iy+PROJECT_WORLDPOS+3)
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, bc					; now hl = iy.x - iy.z
+				push hl
+
+				; get total offset travelled by the vector
+				and a
+				sbc hl, de					; hl = total length of vector
+
+				pop de
+				push hl
+				push de
+
+										; distance from (iy) to z with same sign as hl on stack
+
+				ld l, (ix+PROJECT_WORLDPOS+0)
+				ld h, (ix+PROJECT_WORLDPOS+1)
+				ld e, (iy+PROJECT_WORLDPOS+0)
+				ld d, (iy+PROJECT_WORLDPOS+1)
+				and a
+				sbc hl, de					; hl = x vector from ix to iy
+
+				ld d, h
+				ld e, l
+				pop bc
+				ld (@-Multiplier), bc
+				call LONGMUL1010				; a:hl = x vector * y distance to intersection
+				pop bc
+				ld (@-Divider), bc
+				ex de, hl
+				call DIV2010				; hl = new x offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+0)
+				ld b, (iy+PROJECT_WORLDPOS+1)
+				add hl, bc					; hl = x pos at intersection
+				push hl
+
+				ld l, (ix+PROJECT_WORLDPOS+4)
+				ld h, (ix+PROJECT_WORLDPOS+5)
+				ld e, (iy+PROJECT_WORLDPOS+4)
+				ld d, (iy+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, de					; hl = z vector from ix to iy
+
+				ld d, h
+				ld e, l
+				ld bc, (@-Multiplier)
+				call LONGMUL1010				; a:hl = z vector * x distance to intersection
+				ld bc, (@-Divider)
+				ex de, hl
+				call DIV2010				; hl = new z offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; hl = z (and x) pos at intersection
+
+				; figure out where this should be stored
+				ld a, (ix+PROJECT_FLAGS)
+				and 8
+				jr z, @+storeiy
+
+					ld (ix+PROJECT_WORLDPOS+4), l
+					ld (ix+PROJECT_WORLDPOS+5), h
+					ld (ix+PROJECT_WORLDPOS+2), l
+					ld (ix+PROJECT_WORLDPOS+3), h
+
+					pop hl
+					ld (ix+PROJECT_WORLDPOS+0), l
+					ld (ix+PROJECT_WORLDPOS+1), h
+					ld c, (ix+PROJECT_FLAGS)
+					jr @+nextch
+
+				@storeiy:
+					ld (iy+PROJECT_WORLDPOS+4), l
+					ld (iy+PROJECT_WORLDPOS+5), h
+					ld (iy+PROJECT_WORLDPOS+2), l
+					ld (iy+PROJECT_WORLDPOS+3), h
+
+					pop hl
+					ld (iy+PROJECT_WORLDPOS+0), l
+					ld (iy+PROJECT_WORLDPOS+1), h
+					ld c, (iy+PROJECT_FLAGS)
+
+			@nextch:
+				pop af
+
+			@noypbreak:
+			bit 4, a				; test for break of negative y plane
+			jp z, @+noymbreak
+
+				; get y offset from -z at (ix)
+				ld l, (ix+PROJECT_WORLDPOS+2)
+				ld h, (ix+PROJECT_WORLDPOS+3)
+				ld c, (ix+PROJECT_WORLDPOS+4)
+				ld b, (ix+PROJECT_WORLDPOS+5)
+				add hl, bc
+				ex de, hl					; now de = ix.y - (-ix.z)
+
+				; get x offset from -z at (iy)
+				ld l, (iy+PROJECT_WORLDPOS+2)
+				ld h, (iy+PROJECT_WORLDPOS+3)
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; now hl = iy.y - (-iy.z)
+				push hl
+
+				; get total offset travelled by the vector
+				and a
+				sbc hl, de					; hl = total length of vector
+
+				pop de
+				push hl
+				push de
+
+										; distance from (iy) to z with same sign as hl on stack
+
+				ld l, (ix+PROJECT_WORLDPOS+0)
+				ld h, (ix+PROJECT_WORLDPOS+1)
+				ld e, (iy+PROJECT_WORLDPOS+0)
+				ld d, (iy+PROJECT_WORLDPOS+1)
+				and a
+				sbc hl, de					; hl = x vector from ix to iy
+
+				ld d, h
+				ld e, l
+				pop bc
+				ld (@-Multiplier), bc
+				call LONGMUL1010				; a:hl = x vector * x distance to intersection
+				pop bc
+				ld (@-Divider), bc
+				ex de, hl
+				call DIV2010				; hl = new x offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+0)
+				ld b, (iy+PROJECT_WORLDPOS+1)
+				add hl, bc					; hl = x pos at intersection
+				push hl
+
+				ld l, (ix+PROJECT_WORLDPOS+4)
+				ld h, (ix+PROJECT_WORLDPOS+5)
+				ld e, (iy+PROJECT_WORLDPOS+4)
+				ld d, (iy+PROJECT_WORLDPOS+5)
+				and a
+				sbc hl, de					; hl = z vector from ix to iy
+
+				ld d, h
+				ld e, l
+				ld bc, (@-Multiplier)
+				call LONGMUL1010				; a:hl = z vector * x distance to intersection
+				ld bc, (@-Divider)
+				ex de, hl
+				call DIV2010				; hl = new z offset from iy
+				ld c, (iy+PROJECT_WORLDPOS+4)
+				ld b, (iy+PROJECT_WORLDPOS+5)
+				add hl, bc					; hl = z (and x) pos at intersection
+
+				; figure out where this should be stored
+				ld a, (ix+PROJECT_FLAGS)
+				and 16
+				jr z, @+storeiy
+
+					ld (ix+PROJECT_WORLDPOS+4), l
+					ld (ix+PROJECT_WORLDPOS+5), h
+					ex de, hl
+					and a
+					ld hl, 0
+					sbc hl, de
+					ld (ix+PROJECT_WORLDPOS+2), l
+					ld (ix+PROJECT_WORLDPOS+3), h
+
+					pop hl
+					ld (ix+PROJECT_WORLDPOS+0), l
+					ld (ix+PROJECT_WORLDPOS+1), h
+					jr @+nextch
+
+				@storeiy:
+					ld (iy+PROJECT_WORLDPOS+4), l
+					ld (iy+PROJECT_WORLDPOS+5), h
+					ex de, hl
+					and a
+					ld hl, 0
+					sbc hl, de
+					ld (iy+PROJECT_WORLDPOS+2), l
+					ld (iy+PROJECT_WORLDPOS+3), h
+
+					pop hl
+					ld (iy+PROJECT_WORLDPOS+0), l
+					ld (iy+PROJECT_WORLDPOS+1), h
+
+			@nextch:
+
+			@noymbreak:
+			; do projections if necessary
+			ld a, (ix+PROJECT_FLAGS)
+			and a
+			call nz, PROJECT
+
+			push ix
+			push iy
+			pop ix
+			pop iy
+
+			ld a, (ix+PROJECT_FLAGS)
+			and a
+			call nz, PROJECT
+
+		; actually draw line
+		@noclipdraw:
+
+			ld l, (iy+PROJECT_SCREENPOS)
+			ld h, (iy+PROJECT_SCREENPOS+1)	; hl = screen location of first point
+			ld e, (ix+PROJECT_SCREENPOS)
+			ld d, (ix+PROJECT_SCREENPOS+1)
+
+			pop iy
+			ld a, (iy+EDGE_COLOUR)
+			call SetLineColour
+			push iy
+
+			call DrawLine
+
+	@sloop:
+		pop iy
+		ld de, EDGESIZE
+		add iy, de
+
+	pop bc
+	dec b
+	jp nz, @-lloop
+
+	ret
+	
+SpareVert1: ds PROJECT_SIZE
+SpareVert2: ds PROJECT_SIZE
+
+ReclassifyIXFromX:
+		ld l, (ix+PROJECT_WORLDPOS+4)		;hl = z
+		ld h, (ix+PROJECT_WORLDPOS+5)
+
+		; check for x > z (0 > z - x)
+			ld e, (ix+PROJECT_WORLDPOS+0)	;de = x
+			ld d, (ix+PROJECT_WORLDPOS+1)
+			and a
+			sbc hl, de
+			jp p, @+noxpflag
+
+				set 1, c
+				jr @+noxmflag
+
+			@noxpflag:
+
+ReclassifyIXFromX2:
+		ld l, (ix+PROJECT_WORLDPOS+4)		;hl = z
+		ld h, (ix+PROJECT_WORLDPOS+5)
+
+		; check for x < -z (x + z < 0)
+			ld e, (ix+PROJECT_WORLDPOS+0)
+			ld d, (ix+PROJECT_WORLDPOS+1)
+			and a
+			adc hl, de
+			jp p, @+noxmflag
+
+				set 2, c
+
+			@noxmflag:
+
+ReclassifyIXFromY:
+		ld l, (ix+PROJECT_WORLDPOS+4)		;hl = z
+		ld h, (ix+PROJECT_WORLDPOS+5)
+
+		; check for y > z (0 > z - y)
+			ld e, (ix+PROJECT_WORLDPOS+2)
+			ld d, (ix+PROJECT_WORLDPOS+3)
+			push hl
+			and a
+			sbc hl, de
+			jp p, @+noypflag
+
+				set 3, c
+				pop hl
+				jr @+noymflag
+
+			@noypflag:
+
+		; check for y < -z (y + z < 0)
+			pop hl
+			and a
+			adc hl, de
+			jp p, @+noymflag
+
+				set 4, c
+
+			@noymflag:
+
+		; store flags
+
+		ld (ix+PROJECT_FLAGS), c
+
+	ret
+
+ReclassifyIYFromX:
+		ld l, (iy+PROJECT_WORLDPOS+4)		;hl = z
+		ld h, (iy+PROJECT_WORLDPOS+5)
+
+		; check for x > z (0 > z - x)
+			ld e, (iy+PROJECT_WORLDPOS+0)
+			ld d, (iy+PROJECT_WORLDPOS+1)
+			and a
+			sbc hl, de
+			jp p, @+noxpflag
+
+				set 1, c
+				jr @+noxmflag
+
+			@noxpflag:
+
+ReclassifyIYFromX2:
+		ld l, (iy+PROJECT_WORLDPOS+4)		;hl = z
+		ld h, (iy+PROJECT_WORLDPOS+5)
+
+		; check for x < -z (x + z < 0)
+			ld e, (iy+PROJECT_WORLDPOS+0)
+			ld d, (iy+PROJECT_WORLDPOS+1)
+			and a
+			adc hl, de
+			jp p, @+noxmflag
+
+				set 2, c
+
+			@noxmflag:
+
+ReclassifyIYFromY:
+		ld l, (iy+PROJECT_WORLDPOS+4)		;hl = z
+		ld h, (iy+PROJECT_WORLDPOS+5)
+
+		; check for y > z (0 > z - y)
+			ld e, (iy+PROJECT_WORLDPOS+2)
+			ld d, (iy+PROJECT_WORLDPOS+3)
+			push hl
+			and a
+			sbc hl, de
+			jp p, @+noypflag
+
+				set 3, c
+				pop hl
+				jr @+noymflag
+
+			@noypflag:
+
+		; check for y < -z (y + z < 0)
+			pop hl
+			and a
+			adc hl, de
+			jp p, @+noymflag
+
+				set 4, c
+
+			@noymflag:
+
+		; store flags
+
+		ld (iy+PROJECT_FLAGS), c
+
+	ret
+
+ClearPoints:
+	ld ix, PointTab
+	ld bc, -2
+
+	@PLoop:
+		ld a, (ix)
+		cp 0xff
+		ret z
+
+		ld d, a
+		ld e, (ix-1)
+		xor a
+		ld (de), a
+		add ix, bc
+		jr @-PLoop
+	
+ClearLines:
+	ld ix, LineTab
+
+	@LLoop:
+		ld a, (ix)
+		cp 0xff
+		ret z
+
+		ld h, a
+		ld l, (ix+1)
+		ld d, (ix+2)
+		ld e, (ix+3)
+
+		call ClearLine
+
+		ld bc, 4
+		add ix, bc
+		jr @-LLoop
+
+ClearDisplay:
+	;
+	; page in the screen, for drawing
+	;
+
+		LD C, HMPR
+		IN a, (C)
+		push af
+		ld a, (rampage)
+		OUT (C), a
+
+	ld (tstore), sp
+
+	ld sp, 24576+32768
+	ld de, 0
+	ld b, 192
+
+@clouter:
+@CLLoop: EQU FOR 64
+	push de
+	NEXT @CLLoop
+
+	djnz @-clouter
+
+	ld sp, (tstore)
+
+	;
+	; page the program RAM back in
+	;
+
+		pop af
+		ld c, HMPR
+		out (c), a
+
+	ret
+
+; copy multiplication table
+CopyMultiplicationTable:
+	ld hl, 0
+	ld bc, MULTABSIZE
+
+@MulTabLoop:
+	push bc
+		; get value for current hl
+	sla h
+	ld c, (hl)
+	inc h
+	ld b, (hl)
+	sra h
+
+		; invert hl
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, de
+
+		; store value
+	sla h
+	ld (hl), c
+	inc h
+	ld (hl), b
+	sra h
+
+		; invert hl
+	ex de, hl
+	ld hl, 0
+	and a
+	sbc hl, de
+
+		; increment hl
+	inc hl
+
+		; check for loop
+	pop bc
+	dec c
+	jr nz, @-MulTabLoop
+	ld c, 0xff
+	dec  b
+	jr nz, @-MulTabLoop
+
+	ret
+
+tstore:	dw 0
+
+vidpage: db 0
+rampage: db 0
+buffers: db 0
+
+; frame counter (but not really)
+FrameCount: dw 0
+
+INC "maths.z80s"
+INC "drawline.z80s"
+;INC "drawpoly.z80s"
+
+UpdateCounter:
+	dw 0
+
+himem:
+
+INC "../Globals.z80s"
+
+	DUMP PROGRAMPAGE,32382		; which puts this code at the start of page 2
+	ORG 0x7e7e
+
+;IStart:
+	ld (@+SPIBackup), SP
+	ld SP, @+IStackEnd
+	push hl
+	push af
+	push bc
+
+	ld hl, (UpdateCounter)
+	inc hl
+	ld (UpdateCounter), hl
+
+	ld a, (buffers)
+	and a
+	jr z, @+noflip
+	dec a
+	ld (buffers), a
+
+iflip:
+		LD A, (vidpage)		; flip the buffer visible to the CPU
+		add 2
+		cp %01100000+LASTVIDEOPAGE+2
+		jr nz, @+setpage
+		ld a, %01100000+FIRSTVIDEOPAGE
+		@setpage:
+		ld (vidpage), A
+		LD C, VMPR
+		OUT (C), A
+	@noflip:
+
+	INC "../IRQ.z80s"
+
+	pop bc
+	pop af
+	pop hl
+	ld sp, (@+SPIBackup)
+	ei
+	reti
+
+	@SPIBackup: dw 0
+	ds 20
+	@IStackEnd:
+
+	; line clearing tables kept just above video ram (with a buffer zone for slight overdraw), in the video page
+
+	LineTabPtr:	EQU 24576+32768+512
+	LineTab:	EQU LineTabPtr+2
+	PointTabPtr:EQU 65536-4098
+	PointTab:	EQU 65536-4099
+
+DUMP FIRSTUSERPAGE, 0
+ORG 32768
+
+BeginScreenAccess:
+	LD A, (rampage)
+	LD C, LMPR
+	out (c), a
+	ret
+
+EndScreenAccess:
+	LD A, %00100000+PROGRAMPAGE
+	LD C, LMPR
+	out (c), a
+	ret
+
+lomem:
+
+INC "../Update.z80s"
+INC "../Draw.z80s"
+INC "../Init.z80s"
+
+;sign extend trick:
+;
+;	add	a,a
+;	sbc	a,a

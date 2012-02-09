@@ -1,0 +1,11 @@
+;
+;	init.z80s
+;	---------
+;
+;	The code in this file is called exactly once, immediately after the game has been loaded.
+;
+
+Init:
+;		ld hl, -0x200
+;		ld (PlayerInfoBlock+INFO_POSZ), hl
+	ret
