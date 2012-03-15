@@ -1,9 +1,44 @@
 ;
-;	Old style models
+;	3d Model data. The format is relatively simple, but easiest to
+;	explain by example…
+;
+;	Concepts are:
+;
+;		Vertices - a list of (x, y, z) positions
+;		Faces - hyperplanes in space, which coincide with
+;				the edges of our geometry
+;		Edges - an edge is a line between two vertices that lies
+;				on one or two faces and has a particular colour
+;		Model - a collection of vertices, faces and edges, with
+;				a bounding sphere
+;
+;	The general approach to drawing is that a model's bounding sphere
+;	must be visible for the model to be drawn at all. Following that
+;	all edges are displayed for which at least one face is visible from
+;	the current camera position. A face is deemed to be visible if its
+;	normal is facing towards the camera rather than away from it.
+;
+;	With Elite-style convex objects, this approach provides a perfect
+;	illusion of a filled object without the need to do any actual filling,
+;	at least until two overlap on screen.
+;
+;	As a concession to processing speeds, there's a little trick to the
+;	vertex drawing. When transformed, each is transformed as per its actual
+;	(x, y, z) and at (-x, y, z). This is based on the calculation that
+;	most objects have a lot of geometry that is mirrored across the y-z plane.
+;
+;	To put your mind at rest: the drawing algorithm (i) determines visible
+;	faces; (ii) hence determines visible edges; and (iii) hence transforms
+;	the vertices that it needs. So you don't pay for invisible vertices.
 ;
 
-@points:
-@point1:
+@points:		; we'll need to be able to point back to the start of our vertex array
+@point1:		; we'll also need to be able to point to each vertex individually
+
+				; format is: 2 bytes for each component, ordered x, y, z. Then 26 bytes
+				; of temporary storage that's used ephemerally by the drawing code.
+				; This sounds quite wasteful but the SAM Coupé is a machine with at
+				; least 256 kb of RAM so I allowed myself the indulgence.
 	dw 18, 0, 40
 	ds 26
 @point5:
@@ -34,11 +69,16 @@
 	dw -11, 4, 2
 	ds 26
 
-@faces:
-@face0:
-	dw 0, 247, -64
-	dw 10
-	db 0
+@faces:				; Alright, now some faces, which we'll also want to be able to
+					; point back to momentarily
+					
+@face0:				; again, we'll also want to be able to point to each individual
+					; face, so we'll create little transient pointers for those.
+					; Then the format is...
+					
+	dw 0, 247, -64	; surface normal, three components (x, y, z), each two bytes
+	dw 10			; surface distance from the origin
+	db 0			; two bytes of temporary storage
 	db 0
 @face1:
 	dw 0, -247, -64
@@ -81,12 +121,26 @@
 	db 0
 	db 0
 
-@edges:
-	dw @-face0+8, @-face1+8
-	dw @-point1, @-point1+19
-	dw @-point1, @-point1+8
-	db 0xff
-	dw @-face0+8, @-face4+8
+@edges:						; Time for edges. We'll need to be able to point to
+							; the array but not to individual edges.
+							
+							; So, an edge is defined by:
+							
+	dw @-face0+8, @-face1+8		; pointers to the start of the temporary storage
+								; for each associated face (set the same face
+								; twice if you want to attach this edge to only one)
+								
+	dw @-point1, @-point1+19	; these together are references to the source vertices,
+	dw @-point1, @-point1+8		; with a little nuance due to mirroring. You need to include
+								; a pointer to the start of the vertex and then a pointer to
+								; either 19 bytes later (for the mirrored version of the vertex)
+								; or 8 bytes later (for the unmirrored)
+	
+	db 0xff						; colour for the line, with low and high nibble
+								; set the same for a solid line, or different
+								; for a stipple.
+	
+	dw @-face0+8, @-face4+8		; … and the next edge starts here
 	dw @-point1, @-point1+8
 	dw @-point13, @-point13+8
 	db 0xff
@@ -182,11 +236,19 @@
 	dw @-point9, @-point9+19
 	dw @-point11, @-point11+19
 	db 0xff
+	
+									; Alright, now for the actual model definition:
+	
 Adder:
-	db 10, 9, 25					; numpoints, numfaces, numedges
-	dw @-points, @-faces, @-edges	; pointers to points, faces, edges
-	db 0
+	db 10, 9, 25					; respectively the number of vertices,
+									; faces and edges in the model
+	dw @-points, @-faces, @-edges	; pointers to the arrays for points, faces, edges
+	db 0							; reserved
 	dw 84							; size of bounding sphere
+
+;
+;	The Adder is now done. Further models start here.
+;
 
 @points:
 @point4:
