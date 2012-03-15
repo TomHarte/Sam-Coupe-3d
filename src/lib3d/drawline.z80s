@@ -1,18 +1,70 @@
 ;
+;	Here are the routines related to actual line drawing.
+;
+;	Exposed calls are:
+;
+;		SetLineColour, which sets the colour for future draws
+;		according to the value in the a register (which should
+;		be e.g. 0xff for colour 15, 0xee for colour 14,
+;		0xbc for a colour 11/colour 12 screen-oriented stipple)
+;
+;		DrawLine, which draws a line. It doesn't check that its
+;		staying on screen or in any other way clip, and integer
+;		sizes are used such that it assumes the display to be
+;		no larger than 256x256.
+;
+;		ClearLine, which is a lot line DrawLine in that it draws
+;		a line of colour 0 but may also blank out pixels that
+;		simply happen to adjoin the line, as it sees fit. So its
+;		like DrawLine except that it doesn't really care about
+;		sub-byte plotting precision and you can't change its
+;		colour. It's a fast way to erase.
+;
+;	The routine is just classic Bresenham, implemented in a
+;	fairly rote way. The polygon filler, elsewhere, uses
+;	the run-length version Bresenham when appropriate, at the
+;	cost of an 8 bit division (note: it is explicitly NOT
+;	the DDA algorithm), which might be worth investigating
+;	as an alternative since in practice we're probably going
+;	to be displaying large shapes with simple geometry,
+;	meaning long lines, so the extra cost of a divide before
+;	beginning might be offset by the per-pixel savings.
+;
+;	A really efficient replacement might consider the length
+;	of the line and branch either into classic Bresenham or
+;	run-length Bresenham.
+;
+;	Related thought: I think one of the tricks used by the
+;	Fred-or-wherever 50Hz 3d vector demo was to have every
+;	single possible line draw precomputed - 256*192
+;	possibilities and you just enter with HL or whatever
+;	set to the top left pixel. That's a bit of a demo hack
+;	but might also actually be useful here, possibly some
+;	sort of run length or hard coded decision that might have
+;	to switch a little early due to memory overhead concerns?
+;
+
+;
+;
 ;	SetLineColour - lines from now on will be in the colour 'a'
 ;
+;	This clobbers a. The colour change is achieved by dynamically
+;	reprogramming DrawLine.
+;
 SetLineColour:
-		ld (twobyte1+1), a
+		ld (twobyte1+1), a			; okay, so there's one place where we
+									; want the two byte version of the colour
+									; to be a constant …
 
 		push af
 		and 0xf0
-		ld (highbyte1+1), a
-		ld (highbyte2+1), a
-		ld (highbyte3+1), a
+		ld (highbyte1+1), a			; … three places where we want just the high
+		ld (highbyte2+1), a			; nibble (accepting that the names could have
+		ld (highbyte3+1), a			; been better chosen) …
 		pop af
 		and 0x0f
-		ld (lowbyte1+1), a
-		ld (lowbyte2+1), a
+		ld (lowbyte1+1), a			; … and three places where we want just the
+		ld (lowbyte2+1), a			; low nibble.
 		ld (lowbyte3+1), a
 
 	ret
