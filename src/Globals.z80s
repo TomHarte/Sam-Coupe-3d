@@ -6,36 +6,67 @@
 ;	in this file
 ;
 
+;
+;	Our 3d models don't prima facie need to be globally visible,
+;	but the info blocks (see below) that point to them do, so this
+;	is a prerequisite.
+;
 INC "Models.dat"
 
 ;
-;	player info block
+;	This is the player info block, which describes the current player
+;	state. The INFO_ defines in 3d.z80s give some indication as to
+;	what these fields are.
+;
+;	At the time of writing I've only written code to do rotations
+;	Euler style (with all the associated problems, I know). So:
 ;
 PlayerInfoBlock:
-	db 0xfe, 0xed, 0x00, 0x14, 0xff, 0x00, 0xa6, 0x0a, 0x00, 0x80, 0xf5
-	db 0x80, 0x47, 0x00, 0x00
+	db 0xfe, 0xed, 0x00		; the player's position on the x axis
+	db 0x14, 0xff, 0x00		; the player's position on the y axis
+	db 0xa6, 0x0a, 0x00		; the player's position on the z axis
+	db 0x80, 0xf5			; the player's rotation around x
+	db 0x80, 0x47			; the player's rotation around y
+	db 0x00, 0x00			; the player's rotation around z
 
-;	ds 15
-	dw 0
-	db 0
-	dw 0
-	db 0
-	dw 0
-	db 0				; player position
-	dw 0, 0, 0			; player rotations
-	ds 21
+	; the following were in use before I hand inserted the above
+	; values in order to start the player in an interesting position
+	; dw 0
+	; db 0
+	; dw 0
+	; db 0
+	; dw 0
+	; db 0					; up to here: player position
+	; dw 0, 0, 0			; these three: player rotations
+
+	; ds 21					; temporary storage, not needed for
+							; an info block we'll never draw
 
 ;
-;	Cobra Mk3 test block
+;	Object description blocks. Object description blocks are further
+;	instances of the info block style established above, so they
+;	start with 9 bytes describing location - 3 bytes per component
+;	in the order x, y, z. You then get 6 bytes describing an Euler
+;	rotation - 2 bytes per component in the order x, y z.
+;
+;	After that we include a pointer to the model associated with
+;	this block and then 21 bytes of spare storage. The 21 bytes
+;	are used for temporary store during drawing.
 ;
 CobraMk3Block:
 	ds 6				; position
 	dw 0x100
 	db 0
 	dw 0, 0, 0			; rotations
-ObjAddr:
+
+ObjAddr:				; establish a pointer here so we can change the model
+						; later on as part of the demo program
 	dw CobraMk3
 	ds 21
+
+; Routine stuff from here on down; a few objects in positions I
+; picked to look nice in the demo, referencing a few of the models
+; I just imported.
 
 HouseBlock1:
 	dw 0x500
