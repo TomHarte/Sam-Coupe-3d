@@ -1,8 +1,19 @@
 ;
-;	Use draw to actually display graphics
+;	Use draw actually to display graphics. The automatic
+;	frame rate compensation mechanisms mean that drawing
+;	and updating are decoupled. See Update.z80s for the
+;	code that updates the game from one discrete moment
+;	to the next.
 ;
 
 Draw:
+
+;
+;	The following are two test calls to my DrawPoly routine;
+;	there's nothing else in the code that's smart enough
+;	to clip polygons so they're not actually enabled for
+;	3d (and would probably be too slow anyway)
+;
 ;	call ClearDisplay
 ;			ld a, 4
 ;			ld b, 0xcc
@@ -16,16 +27,27 @@ Draw:
 ;			call DrawPoly
 ;		ret
 
-		; make new player matrix
+
+		; make new player matrix by setting a camera per
+		; the rotations described in the player info block
 			ld iy, PlayerInfoBlock
 			call SetCamera_Rot3
 
-;jr @+nostress
+		; if you wanted to see the version with just the
+		; Cobra Mk3 (ie, not the stress test) then you'd
+		; enable the jump below
+		;
+		; jr @+nostress
+
 		; draw House
 			ld iy, HouseBlock2
 			call DrawModel_Rot3
-			
-;		ret
+
+		; a ret here would leave you with just the house,
+		; so this is an alternative simple scene for
+		; benchmarking.
+		;
+		; ret
 			
 		; draw House
 			ld iy, HouseBlock1
@@ -48,12 +70,24 @@ Draw:
 			ld iy, CobraMk3Block
 			call DrawModel_Rot3
 
+		; this is an alternative jump into an alternative
+		; model drawer that I was experimenting with (being
+		; basically a precompiled model, with little
+		; prewritten programs to handle arbitrary data
+		; duplication); it ended up not being sufficiently
+		; faster than the original to justify the effort
+		;  so is currently disabled
 ;			ld iy, CobraMk3BlockNew
 ;			call DrawModel_Rot3New
 
 
 	ret
 
+;
+;	Test tables are below that would be used by the test
+;	DrawPoly call above. So these would establish a polygon
+;	with vertices at (2, 70), (28, 20), (245, 30) and (5, 190)
+;
 ;DS ALIGN 256
 ;PolyVerticesX:
 ;	db 2, 28, 245, 5
