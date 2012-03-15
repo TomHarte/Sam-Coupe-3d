@@ -39,8 +39,10 @@ PlayerInfoBlock:
 	; db 0					; up to here: player position
 	; dw 0, 0, 0			; these three: player rotations
 
-	; ds 21					; temporary storage, not needed for
-							; an info block we'll never draw
+	ds 21					; temporary storage, which is needed
+							; even for rot3 blocks that won't be
+							; drawn since it's used to cache the
+							; transform matrix
 
 ;
 ;	Object description blocks. Object description blocks are further
@@ -97,7 +99,7 @@ HouseBlock3:
 	db 0
 	dw 0x000
 	db 0				; position
-	dw 0, 0, 0		; rotations
+	dw 0, 0, 0			; rotations
 	dw House
 	ds 21
 
@@ -108,7 +110,7 @@ HouseBlock4:
 	db 0
 	dw 0x154e
 	db 0				; position
-	dw 0, 0, 0		; rotations
+	dw 0, 0, 0			; rotations
 	dw Adder
 	ds 21
 
@@ -119,6 +121,6 @@ HouseBlock5:
 	db 0
 	dw 0x300
 	db 0				; position
-	dw 0, 0, 0		; rotations
+	dw 0, 0, 0			; rotations
 	dw Cube
 	ds 21
