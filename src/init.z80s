@@ -6,6 +6,13 @@
 ;
 
 Init:
+
+;
+;	Test code to set a specific start position for the player;
+;	kind of pointless since we get to pick the memory image at
+;	startup and hence disabled.
+;
 ;		ld hl, -0x200
 ;		ld (PlayerInfoBlock+INFO_POSZ), hl
+
 	ret
