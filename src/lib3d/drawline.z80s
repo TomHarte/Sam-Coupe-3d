@@ -187,8 +187,12 @@ DrawLine:
 		; put hl - the position of the start of the line - onto the stack
 		push hl
 		exx
-			ld de, 128		; (load 128 to de' - this is what we'll
-							; add to hl to effect a change in y)
+			ld de, 128		; Load 128 to de' - this is what we'll
+							; add to hl to effect a change in y, at
+							; least via this entry point. The y negative
+							; drawer will just load a different set of
+							; initial values and then jump into ydil,
+							; immediately below
 		@ydil:
 			pop hl			; pop the current position
 			ld b, 0xf0		; load b and c with masks
@@ -240,27 +244,40 @@ lowbyte1:				or 0x0f			; or in the new colour
 
 			@pelloopleft:
 
-				sub d
-				jr nc, @+nojumpr
+				; in here we're currently plotting left pixels…
 
-					add e
-					jr @-nojumpl
+				sub d					; normal Bresenham stuff, as above, so
+										; subtract delta x…
+										
+				jr nc, @+nojumpr		; … continue unabated if there's enough
+										; error left, but…
+
+					add e				; … otherwise add delta y back in and switch
+					jr @-nojumpl		; to plotting right pixels
 
 				@nojumpr:
-					exx
+					exx					; juggle our registers
 				@nojumprpexx:
-						add hl, de
+						add hl, de		; move down (or up) a line
 
-						ex af, af'
+						ex af, af'		; plot the pixel, being careful to preserve a
 						ld a, (hl)
 						and c
 highbyte1:				or 0xf0
 						ld (hl), a
 						ex af, af'
-					exx
+					exx					; put the registers back how they were
 
-			djnz @-pelloopleft
+			djnz @-pelloopleft			; continue with left pixels, at least for now
 		ret
+
+;
+; Okay, that was all the 'step constantly along y, consider altering x' Bresenham stuff.
+; Now for the 'step constantly along x, consider altering y' stuff. Whereas the stuff
+; above had sort of a holding pattern for left and right pixels (since x changed
+; 'infrequently'), this runs straight through always switching from left to right to
+; left to right.
+;
 
 		@xdiffgreater:		; a = positive x difference, b = positive y difference
 
