@@ -5,3 +5,7 @@
 ;	The code in this file is included in the end-of-display interrupt handler.
 ;
 
+;
+;	We have no code to insert here. However, supposing we had music or sound
+;	effects we'd probably want to put a hook in here.
+;
