@@ -2,15 +2,30 @@
 ;	Update.z80s
 ;	-----------
 ;
-;	Update is called with the number of times to update in de. Hopefully de will be small
+;	Update is a function you supply to update program state. It is called with
+;	a number in de - if your engine is discrete (like 95% of games) you should
+;	update that number of times. If you prefer to think continuously, you should
+;	simulate the passing of de/50 of a second.
 ;
 
+;
+;	These are just some variables I happen to use in this particular implementation
+;	of Update…
+;
 XMove: dw 0
-ZMove: dw 0
-MoveQuantumPositive: ds 2
-MoveQuantumNegative: ds 2
-RotateQuantumPositive: ds 2
-RotateQuantumNegative: ds 2
+ZMove: dw 0		; XMove and ZMove are the amount to move the ship in its local x and z;
+				; we'll scan the input to populate these, then after that read them
+				; back and multiply by the appropriate local axes to work out movement
+
+
+MoveQuantumPositive: ds 2		; these quantums are calculated from the input in de so
+MoveQuantumNegative: ds 2		; that I know how much to add (or subtract) upon command.
+RotateQuantumPositive: ds 2		; Which I guess means I've gone with a 'continuous' time
+RotateQuantumNegative: ds 2		; model, but since I don't yet have any collisions or
+								; anything that's okay. A game implementation might collate
+								; the input then run a loop on de, doing all the normal
+								; game tasks - update positions, check collisions, update
+								; scores or whatever appropriately, repeat
 
 Update:
 ;	ld de, 1
@@ -43,7 +58,9 @@ Update:
 		sbc hl, de
 		ld (RotateQuantumPositive), hl
 
-	; read joystick, keys, etc...
+	;
+	; read the joystick first…
+	;
 	ld bc, 0xeffe
 	in b, (c)
 
@@ -56,7 +73,7 @@ ModifyBlock: EQU PlayerInfoBlock
 	ld c, b
 	rr b
 	rr b
-	jp c, @+nozinc
+	jp c, @+nozinc						; okay, we're checking up and down first, to set ZMove
 		ld hl, (MoveQuantumPositive)
 		ld (ZMove), hl
 	@nozinc:
@@ -66,6 +83,12 @@ ModifyBlock: EQU PlayerInfoBlock
 		ld hl, (MoveQuantumNegative)
 		ld (ZMove), hl
 	@nozdec:
+
+	;
+	;	Now we're going to check left and right, directly modifying the
+	;	current rotation angle in our player info block (via the
+	;	ModifyBlock EQU).
+	;
 
 	rr b
 	jp c, @+noyrotpos
@@ -97,7 +120,17 @@ ModifyBlock: EQU PlayerInfoBlock
 			ld (XMove), hl
 	@noyrotneg:
 
-	; z movement
+	;
+	; Now we effect movement according to local z. We achieve that
+	; by directly reading the camera's forward vector and adding
+	; that to the player's position. Which is probably a bit of a
+	; cheat since it makes the implicit assumption that this info
+	; block was the one used for the camera at the end of the last
+	; frame. We might be better off saving the CAMERA_* vectors after
+	; setting the camera in our Draw routine, since that's when
+	; we'll know that the matrix has been computed and stored in a
+	; defined place.
+	;
 
 		ld hl, (ModifyBlock+INFO_POSX)
 		ld bc, (CAMERA_ZVEC_X)
@@ -117,7 +150,9 @@ ModifyBlock: EQU PlayerInfoBlock
 		call FIXMULADD
 		ld (ModifyBlock+INFO_POSZ), hl
 
-	; x movement
+	;
+	; Effect movement in local x, using similar logic to z, above.
+	;
 		ld hl, (ModifyBlock+INFO_POSX)
 		ld bc, (CAMERA_XVEC_X)
 		ld de, (XMove)
@@ -136,7 +171,11 @@ ModifyBlock: EQU PlayerInfoBlock
 		call FIXMULADD
 		ld (ModifyBlock+INFO_POSZ), hl
 
-	; ... and some keys
+	;
+	; We'll read the a and z keys too, to affect
+	; rotation around y (directly into the info block,
+	; as before)
+	;
 	ld bc, 0xfffe ^ 0x200
 	in a, (c)
 	rr a
@@ -161,11 +200,22 @@ ModifyBlock: EQU PlayerInfoBlock
 
 	@nolookdown:
 
-;jr @+skipanimation
+;
+;	Okay, here's where we apply animation to all of our in-scene
+;	objects. Hence the (disabled) jr below, which would give us
+;	a static scene if we wanted one.
+;
+;	jr @+skipanimation
 
 	; animation
 	add hl, hl
 	ex de, hl
+	
+		; First the Cobra Mk 3 modifications; we'll just add
+		; the negative quantum directly to rotation around y,
+		; then add it times 1.5 to rotation around x (using bc
+		; to calculate the half)
+	
 		ld hl, (CobraMk3Block+INFO_ROTY)
 		ld de, (RotateQuantumPositive)
 		add hl, de
@@ -180,22 +230,28 @@ ModifyBlock: EQU PlayerInfoBlock
 		add hl, de
 		ld (CobraMk3Block+INFO_ROTX), hl
 
+		; HouseBlock3 is also a rotation only, again by half
+		; of the quantum
+
 		ld hl, (HouseBlock3+INFO_ROTY)
 		ld de, (RotateQuantumPositive)
 		sra d
 		rr e
 		add hl, de
 		ld (HouseBlock3+INFO_ROTY), hl
-		
+
+		; HouseBlock1 is a tricky one. I'll walk through it…
+
 		ld hl, (HouseBlock1+INFO_ROTX)
 		add hl, de
-		ld (HouseBlock1+INFO_ROTX), hl
+		ld (HouseBlock1+INFO_ROTX), hl	; we've rotated a little around x
+		
 		ld l, h
 		ld h, SINEL >> 8
 		ld e, (hl)
 		inc h
 		ld d, (hl)
-		ld (HouseBlock1+INFO_POSY), de
+		ld (HouseBlock1+INFO_POSY), de	; okay, now we've decided to set y = sin(rotation in x)
 		ld a, 64
 		sub l
 		ld l, a
@@ -203,7 +259,15 @@ ModifyBlock: EQU PlayerInfoBlock
 		ld e, (hl)
 		inc h
 		ld d, (hl)
-		ld (HouseBlock1+INFO_POSX), de
+		ld (HouseBlock1+INFO_POSX), de	; and x = cos(rotation in x)
+
+		; So, in summary, we've got HouseBlock1 whizzing around in a quick circle,
+		; related to its current rotation. This is just meant to be a 'look at some
+		; moving objects' demo so we don't invest it with any greater logic than that.
+
+
+		; With HouseBlock4 we're back to the simple stuff - just add
+		; the rotation quantum to its rotation around z
 
 		ld hl, (HouseBlock4+INFO_ROTZ)
 		ld de, (RotateQuantumPositive)
@@ -211,6 +275,15 @@ ModifyBlock: EQU PlayerInfoBlock
 		ld (HouseBlock4+INFO_ROTZ), hl
 
 @skipanimation:
+
+	; Okay, one more vestigial thing from the earlier demos - the
+	; user can use the keys 1, 2 or 3 to change the 'main' model
+	; (which is the one associated with the CobraMk3Block, though
+	; in earlier demos there was only one in total)
+	;
+	; We achieve that by just changing the model pointed to within
+	; the info block. Nothing to it, really.
+
 	ld bc, 0xfffe ^ 0x800
 	in d, (c)
 
@@ -231,5 +304,10 @@ ModifyBlock: EQU PlayerInfoBlock
 		ld hl, Adder
 		ld (ObjAddr), hl
 	@nomdlchange:
+
+	;
+	; Okay, that's the complete logic as to how the demo app
+	; updates its scene.
+	;
 
 	ret
