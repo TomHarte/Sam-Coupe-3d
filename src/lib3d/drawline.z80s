@@ -74,6 +74,13 @@ SetLineColour:
 ;	clobbers: everything except ix & iy
 ;
 DrawLine:
+
+		; DrawLine first stores a record into the line table
+		; (the current end of which is pointed to by LineTabPtr)
+		; to record the line that it's about to draw. That means
+		; that when it becomes time to clear the frame, there's a
+		; record of all lines that need to be rubbed out.
+
 			ld ix, (LineTabPtr)
 			ld (ix), h
 			ld (ix+1), l
@@ -84,17 +91,38 @@ DrawLine:
 			add ix, bc
 			ld (LineTabPtr), ix
 
+	;
+	; Exactly how you apply Bresenham depends on which octant of
+	; a circle your line falls under. We'll divide into quadrants
+	; first, so we need first to decide whether the direction from
+	; start to end point is positive or negative along x and y.
+	;
+	; We can reduce this to two cases by switching the start point
+	; and end point over if the need arises, so this initial bit
+	; of code is about getting into a position where the start
+	; coordinate is definitely on the left of the end coordinate
+	; and we know whether the line heads upward or downward.
+	;
+
+
 	; one of four jumps first, to combos of x pos/neg and y pos/neg
 
 		ld a, d
 		sub h
 		ld b, a
-		jr nc, @+ypos
+		jr nc, @+ypos		; i.e. we've just made a decision based on the
+							; sign of the difference in y
 
 		; y is negative
 			ld a, e
 			sub l
-			jp nc, @+xposyneg
+			jp nc, @+xposyneg		; if x was positive then we've hit the
+									; x is positive, y is negative case and
+									; can jump down into the line drawing
+
+			; otherwise we'll flip the coordinates over, meaning that
+			; we're at x is positive and now y is too. So do that and
+			; then proceed to drawing
 
 			ex de, hl	; now x and y are positive
 			ld a, d
@@ -110,7 +138,12 @@ DrawLine:
 		; y is positive
 			ld a, e
 			sub l
-			jr nc, @+xposypos
+			jr nc, @+xposypos		; neato, x is positive too so there's
+									; no need for a start point/end point
+									; swap around
+
+			; okay, we'll swap start and end points, inverting signs,
+			; to give us x positive, y negative and then move on to drawing
 
 			ex de, hl	; now x is positive, but y is negative
 			ld a, d
@@ -121,16 +154,29 @@ DrawLine:
 
 			jp @+xposyneg
 
-	; now the routines themselves...
+	; now the line drawing routines themselves...
 
 ;----------------------------------------------------------------------------------------------
 	@xposypos:
 
-		; starts with positive y difference in b, positive x difference in a
+		; we've entered here with a positive y difference in b and
+		; a positive x difference in a. Per standard Bresenham behaviour
+		; we need to decide whether we're going to plot a pixel for
+		; every single x coordinate and just worry about how y varies
+		; or plot a pixel for every single y coordinate and just worry
+		; about how x varies
+
 		cp b
-		jp nc, @+xdiffgreater
+		jp nc, @+xdiffgreater		; if there's a greater difference in x
+									; than y then we'll plot every single
+									; x by hopping down to the xdiffgreater
+									; segment of this routine
 
 		@ydiffgreater:
+		
+		; if we're here then we're going to plot a pixel at every y
+		; and worry about changes in x
+		
 		ld e, b			; e = dy
 		ld d, a			; d = dx
 		ld b, e			; b = pixel count (which = dy at this stage)
@@ -138,16 +184,19 @@ DrawLine:
 		ld a, e
 		srl a			; a = error = dy >> 1
 
-		; get hl into hl', turn into address load 128 to de'
+		; put hl - the position of the start of the line - onto the stack
 		push hl
 		exx
-			ld de, 128
+			ld de, 128		; (load 128 to de' - this is what we'll
+							; add to hl to effect a change in y)
 		@ydil:
-			pop hl
-			ld b, 0xf0
+			pop hl			; pop the current position
+			ld b, 0xf0		; load b and c with masks
 			ld c, 0x0f
 
-			; convert HL into an address, and jump to plot left if necessary
+			; convert HL into an address, and decide whether we're
+			; going to set the right pixel from the current byte
+			; or the left
 			scf
 			rr h
 			rr l
@@ -155,28 +204,38 @@ DrawLine:
 		jr nc, @+pelloopleft
 
 			@pelloopright:
+			
+				; we're currently plotting right pixels…
 
-				sub d
-				jr nc, @+nojumpl
+				sub d					; standard Bresenham stuff, subtract
+										; the delta x from our error variable,
+										; which is in the accumulator
+										
+				jr nc, @+nojumpl		; if that doesn't put us below zero,
+										; we'll continue at this x position (ie,
+										; so we're plotting right pixels)
 
-					add e
+					add e				; otherwise, we add the delta y to our
+										; error pot...
 					exx
-						inc l
+						inc l			; … and move one pixel to the right
 					jr @+nojumprpexx
 
-				@nojumpl:
-					exx
-						add hl, de
+				@nojumpl:				; at this point we can just plot a pixel, so:
+					exx					; expose our address in hl
+						add hl, de		; proceed down one location
 
-						ex af, af'
-						ld a, (hl)
-						and b
-lowbyte1:				or 0x0f
-						ld (hl), a
-						ex af, af'
-					exx
+						ex af, af'		; saving real a (our error variable),
+						ld a, (hl)		; load in the pixel, 
+						and b			; and off the left hand half,
+lowbyte1:				or 0x0f			; or in the new colour
+						ld (hl), a		; write the pixel out again
+						ex af, af'		; and recover our original a
 
-			djnz @-pelloopright
+					exx					; save our hl address again
+
+			djnz @-pelloopright		; decrement our pixels-to-draw counter,
+									; and continue to the next pixel if necessary
 		ret
 
 			@pelloopleft:
