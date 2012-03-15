@@ -1,3 +1,23 @@
+	; This is very literally what the file name suggests; it's push de
+	; repeated 64 times over.
+	;
+	; What does that achieve? Push de pushes two bytes to the stack.
+	; 64 lots of 2 bytes is 128 bytes. The Sam Coupe's screen is
+	; 128 bytes wide, being 256 individual 4-bit pixels.
+	;
+	; So, if you loaded de with, say, 0xee and sp to point to the end
+	; of a scanline, then performed all 64 of them you'd fill the
+	; scanline with colour 14.
+	;
+	; These 64 pushes are used by the polygon filler for optimal
+	; pixel pushing speed when drawing scanlines. It'll jump straight
+	; in at such a position as to do the number of pushes it needs
+	; and then exit.
+	;
+	; The fiddly details of adding a pixel at the end or a pixel at
+	; the start (so as to give pixel resolution rather than bipixel
+	; resolution is handled up in the polygon drawer proper.
+
 	push de
 	push de
 	push de
