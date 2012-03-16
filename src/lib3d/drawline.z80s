@@ -281,7 +281,9 @@ highbyte1:				or 0xf0
 
 		@xdiffgreater:		; a = positive x difference, b = positive y difference
 
-			; if dx = dy = 0 then the code will get here
+			; if dx = dy = 0 then the code will get here, but in that case
+			; we don't actually want to draw anything so we'll do a quick
+			; test and return immediately if so
 			and a
 			ret z
 
@@ -293,32 +295,40 @@ highbyte1:				or 0xf0
 
 		push hl
 		exx
-			ld de, 128
+			ld de, 128			; this is much as above; de will be what
+								; we add to hl in order to progress by
+								; one unit in whichever y direction we're
+								; headed in
 		@xdil:
 			pop hl
 			ld b, 0xf0
 			ld c, 0x0f
 
-			; convert HL into an address, and do an odd plot if necessary
+			; convert HL into an address, to decide whether we're starting
+			; on an odd or even boundary. If it's an odd boundary we'll need
+			; to do an odd (ie, right hand pixel) plot before becoming byte aligned
 			scf
 			rr h
 			rr l
 		exx
 		jr nc, @+nooddplot
 
+				; this is a pixel output so we need to do the standard Bresenham
+				; error stuff
+				
 			sub e		; error -= dy
 			jr nc, @+noychange
 
 				add d	; error += dx
-					; y ++
+					
 				exx
-					add hl, de
+					add hl, de		; ie, y++ [or y--]
 				exx
 
 			@noychange:
 
 				dec b
-				exx
+				exx						; plot a right hand pixel...
 					ex af, af'
 					ld a, (hl)
 					and b
@@ -331,14 +341,22 @@ lowbyte2:			or 0x0f
 
 		@nooddplot:
 
+			; having become byte aligned if we needed to, we're going
+			; to step through this line two pixels (ie, one byte) at a
+			; time. That means shifting our count in b right a position,
+			; and doing absolutely nothing now if we don't have at least
+			; one pair of pixels to plot. We'll also store the carry
+			; flag (amongst other things) on the stack so we can decide
+			; whether to do a trailing plot when this loop is finished.
+
 			srl b
 				jr z, @+noloop
 				push af
 
 			@dpelloop:
 
-				sub e
-				jr nc, @+noychange
+				sub e						; okay, standard Bresenham test to see
+				jr nc, @+noychange			; whether y will change before this byte
 
 					; y ++
 					exx
@@ -349,13 +367,15 @@ lowbyte2:			or 0x0f
 
 				@noychange:
 
-					sub e
-				jr nc, @+noychange
+					sub e					; check in advance: will y change during
+				jr nc, @+noychange			; this byte? If not then skip to the whole
+											; byte writer, if so then do a left pixel,
+											; then a y change, then a right pixel
 
 					add d
 					ex af, af'
 
-					exx
+					exx						; so, this is left pixel, change y, right pixel
 
 						ld a, (hl)
 						and c
@@ -371,22 +391,32 @@ lowbyte3:				or 0x0f
 					exx
 
 					ex af, af'
-					jr @+checkb
+					jr @+checkb				; we don't want to do that and a double pixel
+											; write, so jump forward from here
 
-				@noychange:
+
+				@noychange:					; if we get to here then we know y doesn't change
+											; between these two pixels and we can just write
+											; the whole byte at once, without going through
+											; a read/modify/write process
 					exx
 twobyte1:					ld (hl), 0xff
 					exx
 
-				@checkb:
-				exx
+				@checkb:					; okay, we've just plotted another two pixels,
+				exx							; so we can increment or pointer in hl,
 					inc l
 				exx
-				djnz @-dpelloop
+				djnz @-dpelloop				; and repeat while there are two pixel
+											; quantities left
 
-			pop af
-			@noloop:
+			pop af				; retrieve carry from before the two-pixel loop,
+			@noloop:			; and exit now if we're done with plotting
 			ret nc
+
+			; if there is a final trailing pixel to plot then do the standard
+			; Bresenham error thing to decide whether y changes now, then do
+			; the plot (which is guaranteed to be a left pixel), and return
 
 			sub e		; error -= dy
 			exx
@@ -405,9 +435,17 @@ highbyte3:			or 0xf0
 		ret
 
 ;----------------------------------------------------------------------------------------------
+;
+; Below is the entry point when we've got to x increasing but y decreasing. We're just going to
+; set up our error numbers and seed bc appropriately to be able to jump into the same code as
+; we used for y increasing, as above, since there'd be no benefit to copying it out again -
+; there's no faster way that I'm aware of to add or subtract 128 from hl than by keeping it
+; in another of the register pairs, so we might as well make it a variable.
+;
+;
 	@xposyneg:
 
-		; starts with negative y difference in b, positive x difference in a
+		; we've entered here with negative y difference in b, positive x difference in a
 		ld c, a
 		ld a, b
 		neg
@@ -447,6 +485,10 @@ highbyte3:			or 0xf0
 ;
 ;	ClearLine - draws a black line from (L, H) to (E, D), possibly doing some extra black pixels by the side
 ;	clobbers: everything except ix & iy
+;
+;	This is essentially the code above, but with all the complexities about picking left and righ
+;	pixels eliminated. It just throws a static 0 out (as stored in b) everywhere it would otherwise
+;	have considered doing a read/modify/write.
 ;
 ClearLine:
 	; one of four jumps first, to combos of x pos/neg and y pos/neg
