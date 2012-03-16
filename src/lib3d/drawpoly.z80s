@@ -1,12 +1,27 @@
 ;
-;	DrawPoly - draws a polygon using A vertices, in two arrays
+;	There's only one public routine in this file:
+;
+;	DrawPoly - draws a polygon using 'a' vertices, in two arrays
 ;	with x positions starting at (H:0) and y positions at (H+1:0),
-;	filled with colour b (high and low nibbles will be plotted;
+;	filled with colour 'b' (high and low nibbles will be plotted;
 ;	stippling is an option)
 ;
 ;	clobbers: af, bc, de, hl, af', bc', de', hl'
 ;
 
+
+;
+; The left and right edge tables; this polygon filler works by scanning each
+; edge in turn, adding its y interception points to one of the edge tables
+; (whichever is free, in practice, making 'left' and 'right' a little of a
+; misnomer) and then running through the table and drawing the appropriate
+; scanlines to screen.
+;
+; The tables are 256 bytes long and page aligned, so we can keep hl as a pointer
+; to the current intercept and just inc or dec l to switch tables. The Sam's
+; screen is only 192 pixels high so we're wasting at least 64 bytes on this
+; thing, and 128 as currently written.
+;
 DS ALIGN 256
 
 LEFTTAB:
@@ -14,14 +29,27 @@ LEFTTAB:
 RIGHTTTAB:
 	ds 256
 
+;
+; As per the mode of operation described above, this is the scanline filler.
+; At this point the table has already been suitably read, so all DrawScanline
+; needs to do is draw a solid line of pixels on line l from position c to
+; position a.
+;
+; The implementation takes advantage of ye olde observation that the stack
+; pointer is a self-decrementing pointer to which we can write two bytes in
+; eleven CPU cycles, and this code has an unrolled loop of 64 pushes that
+; it jumps into at an approprite moment for the byte-aligned portion of its
+; drawing cycle.
+;
 @DrawScanline:
 
-	push af
+	push af				; make sure we don't clobber these things
 	push hl
 	push bc
-	ld (@+SPBackup), sp
+	ld (@+SPBackup), sp	; we'll also want to be able to recover the proper
+						; stack pointer
 
-	; draw from c to a (a is on the right) on line l
+	; so, we need to draw from c to a (a is on the right) on line l
 	
 		; get the address of the first pixel into hl
 			ld h, l
@@ -36,75 +64,116 @@ RIGHTTTAB:
 			rr h
 			rr l
 
-			jr c, @+nohangingpixel		; a is one after the last pixel; draw only up to a, not up to and including
+			jr c, @+nohangingpixel		; a is one after the last pixel;
+										; draw only up to a, not up to and
+										; including, so we test carry rather
+										; than merely sign
 
-			dec b
+			dec b						; this'll be a pixel out, so decrement
+										; our counter
 
-			ld a, (hl)
-			and 0xf
+			ld a, (hl)					; read from hl
+			and 0xf						; mask off the existing left pixel
 			
 			@HighColour1: equ $+1
-			or 0xf0
+			or 0xf0						; add in the replacemend colour
 			
-			ld (hl), a
-			dec l
+			ld (hl), a					; write out to hl
+			dec l						; decrement our write pointer
+										; (taking advantage of the observation
+										; that Sam scanlines never cross
+										; 256-byte boundaries)
 
 		@nohangingpixel:
-			inc l
+			inc l						; push pre-decrements, so we
+										; prepare for that
 		
-		; draw main body of pixels here - divide width by 4 and loop
+		; the main body of pixels is drawn from here
 		
-			ld a, b
+			ld a, b			; okay, load our pixel count into a
 			srl a
-			srl a
+			srl a			; and divide it by four
 
-			ld sp, hl
+			ld sp, hl		; load our pixel pointer into sp
 			@FullColour1: equ $+1
 			ld d, 0xff
 			@FullColour2: equ $+1
-			ld e, 0xff
+			ld e, 0xff		; get a copy of the colour, expanded to
+							; four pixels, into de
 
-			neg
-			add 64
+			neg				; this works out the entry point into our set
+			add 64			; of 64 pushes, to ensure we do the correct
+							; number before exiting. So we work out 64-a.
 
+
+							; get teh entry address into hl; we could save
+							; a few cycles here by aligning that with a 256-byte
+							; boundary, I guess
 			ld h, @+pushrun >> 8
 			add @+pushrun \ 256
 			ld l, a
 			jp (hl)
 
 		@pushrun:
+
+		; this is where the list of 64 push des is placed, by a nice
+		; assembler loop
 		
 			@CLLoop: EQU FOR 64
 				push de
 			NEXT @CLLoop
-;			INCLUDE "pushde64.z80s"		; push de, 64 times over - kept elsewhere for tidyness
 
-			; check if there's an extra 2 pixels to draw
+		; okay, so down to here we've drawn a hanging pixel on the
+		; right if the scanline ended on an odd pixel boundary, so
+		; we're byte aligned, and we've now got fewer pixels left
+		; than we can achieve with pushes - either 3, 2, 1 or 0
+
+			; check if there's an extra 2 pixels to draw by
+			; shifting bit 1 into carry. We'll preserve bit 0
+			; over in c so that we can check for an extra one
+			; after we've drawn the byte-aligned two that we
+			; may need.
+			;
+			; As I'm commenting this (many years after having written
+			; the code) I'm unable to come up with a reason for the
+			; rl c over a (quicker) ld c, b. I'll need to check that out.
+			;
 			rr b
 			rl c
 			rr b
 			jr nc, @+noextradouble
 
-				dec sp
-				pop de
+				; only the sp holds the write address now
+				; (we weren't updating hl in the main loop),
+				; so we achieve a single byte write with some
+				; simple stack hopping
+
+				dec sp		; decrement the stack pointer so that
+							; when we're done it'll point to the
+							; position after that to which we've drawn
+
+				pop de		; pop a whole two bytes from the stack
 
 				@FullColour3: equ $+1
-				ld e, 0xff
-				push de
+				ld e, 0xff	; change just the right hand pair of pixels
+				push de		; push the two bytes back again
 
-			; check if there's an extra 1 pixel to draw
+			; down to here we've pretty much drawn the scanline but there
+			; still may be an extra right-hand pixel to plot, to start
+			; the scanline off. We'll use the lowest bit of c to decide
+			; whether that's the case, having trashed b at this point
 
 			@noextradouble:
 			rr c
 			jr nc, @+noextrasingle
 
-			dec sp
-			pop de
-			ld a, e
-			and 0xf0
-			@LowColour1: equ $+1
-			or 0xf
-			ld e, a
+			dec sp					; rote stuff to plot a single
+			pop de					; right-hand pixel with the stack
+			ld a, e					; pointer being a pointer. Might be
+			and 0xf0				; worth checking whether there's any
+			@LowColour1: equ $+1	; advantage to doing this after restoring
+			or 0xf					; the original registers below via a
+			ld e, a					; less fiddly, non-stack method?
 			push de
 
 	@noextrasingle:
@@ -118,6 +187,10 @@ ret
 
 
 
+;
+; Some storage for the DrawPoly routine. Should be locals, really.
+;
+;
 NUMVERTS:
 	db 0
 VERTEXPOINTER:
@@ -128,6 +201,20 @@ STARTY:
 ENDY: 
 	db 0
 
+;
+; The DrawPoly routine. Works for convex polys only.
+; You should enter with:
+;
+;		a = the number of vertices
+;		b = the colour of the polygon (expanded to a byte)
+;		hl = a pointer to the vertex table
+;
+;	The vertex table should be 512 bytes (as it's assumed source polygons
+;	will be processed and the results stored to the table, making it
+;	a one-off cost rather than a per-polygon cost), with the first 256
+;	bytes being x positions and the last 256 bytes being y positions.
+;	There's no sub-pixel accuracy in vertex placement.
+;
 DrawPoly:
 
 	; dynamically reprogram scanline filler now, so b can be forgotten after this
