@@ -1,3 +1,21 @@
+;
+;	Matrix.z80s
+;
+;	Contains the routines:
+;
+;		GetRot3Matrix
+;		CombineRot3Matrix
+;		SetCamera_Rot3
+;		GetModelOffset
+;		CombineMatrices
+;		ApplyInverseObjectMatrix
+;		ApplyCompositeMatrix
+;
+
+; Some
+;
+;
+
 	@sin_x: dw 0
 	@cos_x: dw 0
 	@sin_y: dw 0
