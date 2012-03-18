@@ -1,3 +1,13 @@
+;
+; This file contains some helpful EQUs to allow hardware register access
+; by name elsewhere rather than address. It's documented throughout. It's
+; also quite clearly not my work, though at this point I honestly can't
+; recall where it originated from. I guess it could be a copy and paste
+; of bits from the technical manual but that doesn't feel very likely.
+;
+; Can anyone help?
+;
+
 ; paging registers
 ;
 ;	LMPR - low 5 bits = page,	bit 5 = set high to use RAM in 0-16383
