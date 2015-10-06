@@ -1,6 +1,10 @@
-# Sam-Coupe-3d
-A vector 3d engine for the Sam Coupé, a British Z80-based microcomputer of the late 80s. 
+# Sam Coupé 3d
+A vector 3d engine for the Sam Coupé, a British Z80-based microcomputer of the late 80s. It is explicitly designed for use as a library for other software.
 
 It would likely be adaptable to other similar micros, such as the Spectrum and Amstrad CPC.
 
-<iframe width="420" height="315" src="https://www.youtube.com/embed/j0xN_Mi3B_I" frameborder="0" allowfullscreen></iframe>
+See README.pdf for detailed memory map and usage details.
+
+Video:
+
+[![IMAGE ALT TEXT HERE](http://img.youtube.com/vi/j0xN_Mi3B_I/0.jpg)](https://www.youtube.com/embed/j0xN_Mi3B_I)
