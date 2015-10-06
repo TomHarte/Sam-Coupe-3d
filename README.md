@@ -5,6 +5,6 @@ It would likely be adaptable to other similar micros, such as the Spectrum and A
 
 See README.pdf for detailed memory map and usage details.
 
-Video:
+Click through for video:
 
-[![IMAGE ALT TEXT HERE](http://img.youtube.com/vi/j0xN_Mi3B_I/0.jpg)](https://www.youtube.com/embed/j0xN_Mi3B_I)
+[![YouTube video](http://img.youtube.com/vi/j0xN_Mi3B_I/0.jpg)](https://www.youtube.com/embed/j0xN_Mi3B_I)
